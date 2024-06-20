@@ -18,7 +18,8 @@ from acts import UnitConstants as u
 @click.option('-v','--verbose', default=False, is_flag=True)
 def main(data, modulemap, gnn, verbose):
     assert os.path.exists(data)
-    assert os.path.exists(modulemap)
+    assert os.path.exists(modulemap + ".triplets.root")
+    assert os.path.exists(modulemap + ".doublets.root")
     assert os.path.exists(gnn)
 
     print("verbose", verbose)
