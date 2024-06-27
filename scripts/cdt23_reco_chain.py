@@ -38,7 +38,7 @@ def main(data, modulemap, gnn, verbose):
     gnnConfig = {
         "level": gnnLogLevel,
         "cut": 0.5,
-        "numFeatures": 3,
+        "numFeatures": 12,
         "undirected": False,
         "modelPath": gnn,
     }
@@ -66,14 +66,22 @@ def main(data, modulemap, gnn, verbose):
 
     s.addReader(athReader)
 
+    e = acts.examples.NodeFeature
+
     findingAlg = acts.examples.TrackFindingAlgorithmExaTrkX(
         level=gnnLogLevel,
         inputSpacePoints="spacepoints",
+        inputClusters="clusters",
         outputProtoTracks="gnn_prototracks",
         graphConstructor=graphConstructor,
         edgeClassifiers=edgeClassifiers,
         trackBuilder=trackBuilder,
-        useXYZ=True,
+        nodeFeatures=[
+            e.R, e.Phi, e.Z, e.Eta,
+            e.Cluster1R, e.Cluster1Phi, e.Cluster1Z, e.Cluster1Eta,
+            e.Cluster2R, e.Cluster2Phi, e.Cluster2Z, e.Cluster2Eta,
+        ],
+        featureScales = [1.0] * 12,
     )
 
     s.addAlgorithm(findingAlg)
