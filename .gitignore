@@ -1,6 +1,8 @@
-data
-run.sh
-
+setup_acorn.sh
+*.root
+tmp
+ctd23/data
+rel24/data
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -32,7 +32,7 @@ def model_save(
     output_path: str,
     tag_name: str | None = None,
 ):
-    lightning_model = getattr(getattr(stages, stage_name), model_name)
+    lightning_model = getattr(getattr(stages, stage_name), "Jitable" + model_name)
     if not issubclass(lightning_model, LightningModule):
         raise ValueError(f"Model {model_name} is not a LightningModule")
 
