@@ -3,6 +3,7 @@ setup_acorn.sh
 tmp
 ctd23/data
 rel24/data
+timing.tsv
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

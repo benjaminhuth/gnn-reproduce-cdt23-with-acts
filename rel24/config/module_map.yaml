@@ -1,0 +1,26 @@
+# CommonFramework configuration
+stage: graph_construction
+model: PyModuleMap
+input_dir: tmp/rel24/feature_store/
+stage_dir: tmp/rel24/module_map/
+
+# Dataset parameters
+data_split: [1, 1, 8] # Number of [training, validation, testing] examples
+module_map_path: rel24/data/ModuleMap_rel24_ttbar_v5_89809evts.triplets.root
+batch_size: 2000000
+
+# Evaluation parameters
+target_tracks:
+  pt: [1000, .inf]
+  nhits: [3, .inf]
+  primary: True
+  pdgId: [not_in, [11, -11]]
+  radius: [0., 260.]
+  eta_particle: [-4., 4.]
+  redundant_split_edges: False
+
+# Plotting parameters
+plots:
+  graph_construction_efficiency:
+    title: Module Map Edge-wise Efficiency
+    pt_units: MeV

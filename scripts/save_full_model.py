@@ -53,8 +53,10 @@ def model_save(
     # load the checkpoint
     print(f"Loading checkpoint from {checkpoint_path}")
     model = lightning_model.load_from_checkpoint(checkpoint_path).to("cpu")
-    # print(model.eval())
-    # print(vars(model))
+
+    with open("hparams.json", "w") as f:
+        yaml.dump(model.hparams, f)
+
     print("edge features:", model.hparams["edge_features"])
     print("node features:", model.hparams["node_features"])
 

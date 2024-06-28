@@ -81,8 +81,9 @@ def main(data, modulemap, gnn, verbose):
             e.Cluster1R, e.Cluster1Phi, e.Cluster1Z, e.Cluster1Eta,
             e.Cluster2R, e.Cluster2Phi, e.Cluster2Z, e.Cluster2Eta,
         ],
-        featureScales = [1.0] * 12,
+        featureScales = [1000.0, 3.14159265359, 1000.0, 1.0] * 3,
     )
+
 
     s.addAlgorithm(findingAlg)
 
