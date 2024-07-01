@@ -66,7 +66,7 @@ def main(data, modulemap, gnn, verbose):
         outputSpacePoints = "spacepoints",
         outputClusters = "clusters",
         outputMeasurements = "measurements",
-        outptuMeasurementsParticlesMap = "meas_part_map",
+        outputMeasurementParticlesMap = "meas_part_map",
         outputParticles = "particles"
     )
 
@@ -94,13 +94,14 @@ def main(data, modulemap, gnn, verbose):
 
     s.addAlgorithm(
         acts.examples.PrototracksToTracks(
-            inputPrototracks="gnn_prototracks",
+            level=acts.logging.INFO,
+            inputProtoTracks="gnn_prototracks",
             inputMeasurements="measurements",
             outputTracks="tracks",
         )
     )
 
-    self.addAlgorithm(
+    s.addAlgorithm(
         acts.examples.TrackTruthMatcher(
             level=acts.logging.INFO,
             inputTracks="tracks",
@@ -113,10 +114,10 @@ def main(data, modulemap, gnn, verbose):
     )
 
 
-    self.addWriter(
+    s.addWriter(
         acts.examples.CKFPerformanceWriter(
-            level=acts.logging.WARNING,
-            inputParticles=self.target_particles_key,
+            level=acts.logging.INFO,
+            inputParticles="particles",
             inputTrackParticleMatching="tpm",
             inputParticleTrackMatching="ptm",
             inputTracks="tracks",
