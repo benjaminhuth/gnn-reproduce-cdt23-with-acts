@@ -32,7 +32,10 @@ def main(data, modulemap, gnn, verbose):
 
     metricLearningConfig = {
         "level": gnnLogLevel,
-        "moduleMapPath": modulemap
+        "moduleMapPath": modulemap,
+        "rScale": 1000.0,
+        "phiScale": 3.141592654,
+        "zScale": 1000.0,
     }
 
     gnnConfig = {
