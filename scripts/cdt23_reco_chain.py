@@ -65,30 +65,71 @@ def main(data, modulemap, gnn, verbose):
         inputfile = data,
         outputSpacePoints = "spacepoints",
         outputClusters = "clusters",
+        outputMeasurements = "measurements",
+        outptuMeasurementsParticlesMap = "meas_part_map",
+        outputParticles = "particles"
     )
 
     s.addReader(athReader)
 
     e = acts.examples.NodeFeature
 
-    findingAlg = acts.examples.TrackFindingAlgorithmExaTrkX(
-        level=gnnLogLevel,
-        inputSpacePoints="spacepoints",
-        inputClusters="clusters",
-        outputProtoTracks="gnn_prototracks",
-        graphConstructor=graphConstructor,
-        edgeClassifiers=edgeClassifiers,
-        trackBuilder=trackBuilder,
-        nodeFeatures=[
-            e.R, e.Phi, e.Z, e.Eta,
-            e.Cluster1R, e.Cluster1Phi, e.Cluster1Z, e.Cluster1Eta,
-            e.Cluster2R, e.Cluster2Phi, e.Cluster2Z, e.Cluster2Eta,
-        ],
-        featureScales = [1000.0, 3.14159265359, 1000.0, 1.0] * 3,
+    s.addAlgorithm(
+        acts.examples.TrackFindingAlgorithmExaTrkX(
+            level=gnnLogLevel,
+            inputSpacePoints="spacepoints",
+            inputClusters="clusters",
+            outputProtoTracks="gnn_prototracks",
+            graphConstructor=graphConstructor,
+            edgeClassifiers=edgeClassifiers,
+            trackBuilder=trackBuilder,
+            nodeFeatures=[
+                e.R, e.Phi, e.Z, e.Eta,
+                e.Cluster1R, e.Cluster1Phi, e.Cluster1Z, e.Cluster1Eta,
+                e.Cluster2R, e.Cluster2Phi, e.Cluster2Z, e.Cluster2Eta,
+            ],
+            featureScales = [1000.0, 3.14159265359, 1000.0, 1.0] * 3,
+        )
+    )
+
+    s.addAlgorithm(
+        acts.examples.PrototracksToTracks(
+            inputPrototracks="gnn_prototracks",
+            inputMeasurements="measurements",
+            outputTracks="tracks",
+        )
+    )
+
+    self.addAlgorithm(
+        acts.examples.TrackTruthMatcher(
+            level=acts.logging.INFO,
+            inputTracks="tracks",
+            inputParticles="particles",
+            inputMeasurementParticlesMap="meas_part_map",
+            outputTrackParticleMatching="tpm",
+            outputParticleTrackMatching="ptm",
+            doubleMatching=True,
+        )
     )
 
 
-    s.addAlgorithm(findingAlg)
+    self.addWriter(
+        acts.examples.CKFPerformanceWriter(
+            level=acts.logging.WARNING,
+            inputParticles=self.target_particles_key,
+            inputTrackParticleMatching="tpm",
+            inputParticleTrackMatching="ptm",
+            inputTracks="tracks",
+            filePath="performance.root",
+            # effPlotToolConfig=acts.examples.EffPlotToolConfig(self.binningCfg),
+            # duplicationPlotToolConfig=acts.examples.DuplicationPlotToolConfig(
+            #     self.binningCfg
+            # ),
+            # fakeRatePlotToolConfig=acts.examples.FakeRatePlotToolConfig(
+            #     self.binningCfg
+            # ),
+        )
+    )
 
     s.run()
 
