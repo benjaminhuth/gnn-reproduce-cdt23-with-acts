@@ -12,45 +12,17 @@ import acts
 from acts import UnitConstants as u
 
 @click.command()
-@click.option('--data', help="Path to the ROOT file with dumped data")
-@click.option('--modulemap', help="Path to the module map file")
-@click.option('--gnn', help="Path to the GNN model file (*.pt)")
+@click.option('--data', help="Path to the ROOT file with dumped data", default="@@@")
+@click.option('--modulemap', help="Path to the module map file", default="@@@")
+@click.option('--gnn', help="Path to the GNN model file (*.pt)", default="@@@")
+@click.option('--truth', help="Use truth tracking instead of GNN", default=False, is_flag=True)
 @click.option('-v','--verbose', default=False, is_flag=True)
-def main(data, modulemap, gnn, verbose):
-    assert os.path.exists(data)
-    assert os.path.exists(modulemap + ".triplets.root")
-    assert os.path.exists(modulemap + ".doublets.root")
-    assert os.path.exists(gnn)
-
-    print("verbose", verbose)
-
-    # Setup pipeline
-    modelDir = Path(__file__).parent / "torchscript_models"
-    print("model dir:", modelDir)
-
-    gnnLogLevel = acts.logging.VERBOSE if verbose else acts.logging.DEBUG
-
-    metricLearningConfig = {
-        "level": gnnLogLevel,
-        "moduleMapPath": modulemap,
-        "rScale": 1000.0,
-        "phiScale": 3.141592654,
-        "zScale": 1000.0,
-    }
-
-    gnnConfig = {
-        "level": gnnLogLevel,
-        "cut": 0.5,
-        "numFeatures": 12,
-        "undirected": False,
-        "modelPath": gnn,
-    }
-
-    graphConstructor = acts.examples.ModuleMapCpp(**metricLearningConfig)
-    edgeClassifiers = [
-        acts.examples.TorchEdgeClassifier(**gnnConfig),
-    ]
-    trackBuilder = acts.examples.BoostTrackBuilding(gnnLogLevel)
+def main(data, modulemap, gnn, truth, verbose):
+    if not truth:
+        assert os.path.exists(data)
+        assert os.path.exists(modulemap + ".triplets.root")
+        assert os.path.exists(modulemap + ".doublets.root")
+        assert os.path.exists(gnn)
 
     s = acts.examples.Sequencer(
         events=1,
@@ -72,29 +44,63 @@ def main(data, modulemap, gnn, verbose):
 
     s.addReader(athReader)
 
-    e = acts.examples.NodeFeature
+    if not truth:
+        gnnLogLevel = acts.logging.VERBOSE if verbose else acts.logging.DEBUG
 
-    s.addAlgorithm(
-        acts.examples.TrackFindingAlgorithmExaTrkX(
-            level=gnnLogLevel,
-            inputSpacePoints="spacepoints",
-            inputClusters="clusters",
-            outputProtoTracks="gnn_prototracks",
-            graphConstructor=graphConstructor,
-            edgeClassifiers=edgeClassifiers,
-            trackBuilder=trackBuilder,
-            nodeFeatures=[
-                e.R, e.Phi, e.Z, e.Eta,
-                e.Cluster1R, e.Cluster1Phi, e.Cluster1Z, e.Cluster1Eta,
-                e.Cluster2R, e.Cluster2Phi, e.Cluster2Z, e.Cluster2Eta,
-            ],
-            featureScales = [1000.0, 3.14159265359, 1000.0, 1.0] * 3,
+        metricLearningConfig = {
+            "level": gnnLogLevel,
+            "moduleMapPath": modulemap,
+            "rScale": 1000.0,
+            "phiScale": 3.141592654,
+            "zScale": 1000.0,
+        }
+
+        gnnConfig = {
+            "level": gnnLogLevel,
+            "cut": 0.5,
+            "numFeatures": 12,
+            "undirected": False,
+            "modelPath": gnn,
+        }
+
+        graphConstructor = acts.examples.ModuleMapCpp(**metricLearningConfig)
+        edgeClassifiers = [
+            acts.examples.TorchEdgeClassifier(**gnnConfig),
+        ]
+        trackBuilder = acts.examples.BoostTrackBuilding(gnnLogLevel)
+
+        e = acts.examples.NodeFeature
+
+        s.addAlgorithm(
+            acts.examples.TrackFindingAlgorithmExaTrkX(
+                level=gnnLogLevel,
+                inputSpacePoints="spacepoints",
+                inputClusters="clusters",
+                outputProtoTracks="gnn_prototracks",
+                graphConstructor=graphConstructor,
+                edgeClassifiers=edgeClassifiers,
+                trackBuilder=trackBuilder,
+                nodeFeatures=[
+                    e.R, e.Phi, e.Z, e.Eta,
+                    e.Cluster1R, e.Cluster1Phi, e.Cluster1Z, e.Cluster1Eta,
+                    e.Cluster2R, e.Cluster2Phi, e.Cluster2Z, e.Cluster2Eta,
+                ],
+                featureScales = [1000.0, 3.14159265359, 1000.0, 1.0] * 3,
+            )
         )
-    )
+    else:
+        s.addAlgorithm(
+            acts.examples.TruthTrackFinder(
+                level=acts.logging.VERBOSE,
+                inputParticles="particles",
+                inputMeasurementParticlesMap="meas_part_map",
+                outputProtoTracks="gnn_prototracks"
+            )
+        )
 
     s.addAlgorithm(
         acts.examples.PrototracksToTracks(
-            level=acts.logging.INFO,
+            level=acts.logging.DEBUG,
             inputProtoTracks="gnn_prototracks",
             inputMeasurements="measurements",
             outputTracks="tracks",
@@ -103,7 +109,7 @@ def main(data, modulemap, gnn, verbose):
 
     s.addAlgorithm(
         acts.examples.TrackTruthMatcher(
-            level=acts.logging.INFO,
+            level=acts.logging.DEBUG,
             inputTracks="tracks",
             inputParticles="particles",
             inputMeasurementParticlesMap="meas_part_map",
@@ -116,7 +122,7 @@ def main(data, modulemap, gnn, verbose):
 
     s.addWriter(
         acts.examples.CKFPerformanceWriter(
-            level=acts.logging.INFO,
+            level=acts.logging.VERBOSE,
             inputParticles="particles",
             inputTrackParticleMatching="tpm",
             inputParticleTrackMatching="ptm",
