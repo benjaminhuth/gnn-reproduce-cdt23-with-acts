@@ -1,0 +1,41 @@
+stage: edge_classifier
+model: InteractionGNN2
+
+input_dir: tmp/rel24/module_map
+stage_dir: tmp/rel24/gnn
+project: rel24 # Used in logging
+accelerator: gpu
+devices: 1
+nodes: 1
+
+# Dataset parameters
+data_split: [1, 8, 1] # Number of [training, validation, testing] examples
+
+dataset_class: GraphDataset
+undirected: False
+
+# Evaluation parameters
+score_cut: 0.5
+#input_cut: 0.2
+
+target_tracks:
+  pt: [1000, .inf]
+  nhits: [3, .inf]
+  primary: True
+  pdgId: [not_in, [11, -11]]
+  radius: [0., 260.]
+  eta_particle: [-4., 4.]
+  #redundant_split_edges: False
+
+# Plotting parameters
+plots:
+  gnn_efficiency_rz:
+    title: GNN edge-wise Efficiency vs (r,z)
+
+  gnn_purity_rz:
+    title: GNN edge-wise Purity vs (r,z)
+    vmin: 0.4
+
+  graph_scoring_efficiency:
+    title: GNN Edge-wise Efficiency eta
+    pt_units: GeV

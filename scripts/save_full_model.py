@@ -32,7 +32,11 @@ def model_save(
     output_path: str,
     tag_name: str | None = None,
 ):
-    lightning_model = getattr(getattr(stages, stage_name), "Jitable" + model_name)
+    load_model_name = model_name
+    if model_name == "InteractionGNN2":
+        load_model_name = "JitableInteractionGNN2"
+
+    lightning_model = getattr(getattr(stages, stage_name), load_model_name)
     if not issubclass(lightning_model, LightningModule):
         raise ValueError(f"Model {model_name} is not a LightningModule")
 
@@ -57,7 +61,10 @@ def model_save(
     with open("hparams.json", "w") as f:
         yaml.dump(model.hparams, f)
 
-    print("edge features:", model.hparams["edge_features"])
+    try:
+        print("edge features:", model.hparams["edge_features"])
+    except:
+        pass
     print("node features:", model.hparams["node_features"])
 
 

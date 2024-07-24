@@ -4,10 +4,12 @@ model: PyModuleMap
 input_dir: tmp/rel24/feature_store/
 stage_dir: tmp/rel24/module_map/
 
+max_workers: 1
+
 # Dataset parameters
-data_split: [1, 1, 8] # Number of [training, validation, testing] examples
+data_split: [1, 8, 1] # Number of [training, validation, testing] examples
 module_map_path: rel24/data/ModuleMap_rel24_ttbar_v5_89809evts.triplets.root
-batch_size: 2000000
+batch_size: 200000
 
 # Evaluation parameters
 target_tracks:
@@ -17,7 +19,7 @@ target_tracks:
   pdgId: [not_in, [11, -11]]
   radius: [0., 260.]
   eta_particle: [-4., 4.]
-  redundant_split_edges: False
+#  redundant_split_edges: False
 
 # Plotting parameters
 plots:

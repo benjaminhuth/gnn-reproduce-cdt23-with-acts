@@ -1,11 +1,15 @@
 # CommonFramework configuration
 stage: graph_construction
 model: PyModuleMap
-input_dir: MY_DATA_DIR/ATLAS-P2-ITK-23-00-03_Rel.21.9/ttbar/feature_store/
-stage_dir: MY_DATA_DIR/ATLAS-P2-ITK-23-00-03_Rel.21.9/ttbar/module_map/
+input_dir: tmp/ctd23/feature_store
+stage_dir: tmp/ctd23/module_map
+module_map_path: ctd23/data/MMtriplet_1GeV_3hits_noE__merged__sorted.txt
 
 # Dataset parameters
-data_split: [0, 1000, 0] # Number of [training, validation, testing] examples
+data_split: [1, 8, 1] # Number of [training, validation, testing] examples
+batch_size: 20000 #2000000
+
+max_workers: 1
 
 # Evaluation parameters
 target_tracks:

@@ -4,7 +4,8 @@ model: AthenaRootReader
 input_dir: rel24/data
 stage_dir: tmp/rel24/feature_store
 #module_lookup_path: 
-max_workers: 10
+
+max_workers: 1
 
 input_sets:
     train: rel24/config/trainset.txt
@@ -15,9 +16,12 @@ input_sets:
 # Feature Configurations
 feature_sets:
     hit_features: [hit_id, x, y, z, r, phi, eta, region, module_id,
-                cluster_x_1, cluster_y_1, cluster_z_1, cluster_x_2, cluster_y_2, cluster_z_2,
-                norm_x_1, norm_y_1, norm_x_2, norm_y_2, norm_z_1, eta_angle_1, phi_angle_1, eta_angle_2, phi_angle_2, norm_z_2]
-    track_features: [particle_id, pt, radius, primary, nhits, pdgId]
+                cluster_r_1, cluster_phi_1, cluster_z_1, cluster_r_2,
+                cluster_phi_2, cluster_z_2, cluster_eta_1, cluster_eta_2,
+                norm_x_1, norm_y_1, norm_x_2, norm_y_2, norm_z_1,
+                eta_angle_1, phi_angle_1, eta_angle_2, phi_angle_2, norm_z_2]
+    track_features: [particle_id, eta_particle, pt, radius, primary, nhits, pdgId, redundant_split_edges]
+    edge_features: [dr, dphi, dz, deta, phislope, rphislope]
 
 region_labels:
     1: {hardware: PIXEL, barrel_endcap: -2}

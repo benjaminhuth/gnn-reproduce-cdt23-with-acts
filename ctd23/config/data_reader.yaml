@@ -2,8 +2,11 @@
 stage: data_reading
 model: AthenaRootReader
 input_dir: ctd23/data
+
 input_sets:
-    test: ctd23/data/test.txt
+    train: ctd23/config/trainset.txt
+    valid: ctd23/config/evalset.txt
+    test:  ctd23/config/testset.txt
 
 stage_dir: tmp/ctd23/feature_store
 

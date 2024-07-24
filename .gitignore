@@ -1,9 +1,12 @@
+events-hits.txt
+events-particles.txt
 setup_acorn.sh
 *.root
 tmp
 ctd23/data
 rel24/data
 timing.tsv
+lightning_logs
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

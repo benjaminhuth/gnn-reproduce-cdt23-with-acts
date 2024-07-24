@@ -15,13 +15,13 @@ try_source $HOME/setup_lcg_cuda.sh
 try_source $HOME/acts/build/python/setup.sh
 try_source $HOME/CERN/acts/build/python/setup.sh
 
-#DATA=rel24/data/user.avallier.37060564.EXT0._000001.Dump_GNN4Itk.root
-DATA=rel24/data/Dump_GNN4Itk.root
+mkdir -p tmp/ctd23/acts
 
+# Take rel24 GNN since we now focus on ModuleMap performance
 $PREFIX python3 scripts/cdt23_reco_chain.py \
-    --modulemap rel24/data/ModuleMap_rel24_ttbar_v5_89809evts \
-    --data $DATA \
+    --metric-learning ctd23/data/metric_learning.pt \
+    --data ctd23/data/GNN4Itk_v2__mc15_14TeV.600012.PhPy8EG_A14_ttbar_hdamp258p75_nonallhad.recon.RDO.e8185_s3770_s3773_r14431__J016.root \
     --gnn rel24/data/gnn.pt \
-    --output tmp/rel24/acts \
-    --no-phi-ovl-sps \
+    --output tmp/ctd23/acts \
+#    --unique-modules-truth-graph \
     "$@"
