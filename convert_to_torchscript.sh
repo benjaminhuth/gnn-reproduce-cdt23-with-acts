@@ -2,9 +2,6 @@
 
 source setup_acorn.sh
 
-MODEL=InteractionGNN2
-STAGE=edge_classifier
-
 function convert {
     DIR=$(dirname $3)
 
@@ -19,7 +16,9 @@ function convert {
 }
 
 
-#convert InteractionGNN2 edge_classifier "ctd23/data/GNN_IN2_epochs169.ckpt" gnn.pt
+convert InteractionGNN2 edge_classifier "ctd23/data/GNN_IN2_epochs169.ckpt" gnn.pt
 #convert InteractionGNN2 edge_classifier "rel24/data/best_latent128_LN--val_loss=0.000409-epoch=77.ckpt" gnn.pt
 
-convert MetricLearning graph_construction "ctd23/data/best-11292882-f1_0.010190.ckpt" metric_learning.pt
+#convert MetricLearning graph_construction "ctd23/data/best-11292882-f1_0.010190.ckpt" metric_learning.pt
+#convert Filter edge_classifier "./ctd23/data/best-11984324-auc=0.967753.ckpt" filter.pt
+#convert InteractionGNNWithPyG edge_classifier "./ctd23/data/best-21796495-val_loss=0.000755-epoch=91.ckpt" gnn_metric_learning.pt

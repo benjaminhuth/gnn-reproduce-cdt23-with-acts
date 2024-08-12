@@ -31,8 +31,6 @@ region_labels:
     5: {hardware: PIXEL, barrel_endcap: 2}
     6: {hardware: STRIP, barrel_endcap: 2}
 
-hard_cuts:
-
 column_lookup:
     coordinates: [cluster_id, hardware, cluster_x, cluster_y, cluster_z]
     region: [barrel_endcap, layer_disk, eta_module, phi_module, side]

@@ -35,6 +35,8 @@ def model_save(
     load_model_name = model_name
     if model_name == "InteractionGNN2":
         load_model_name = "JitableInteractionGNN2"
+    if model_name == "Filter":
+        load_model_name = "JitableFilter"
 
     lightning_model = getattr(getattr(stages, stage_name), load_model_name)
     if not issubclass(lightning_model, LightningModule):
@@ -56,7 +58,7 @@ def model_save(
 
     # load the checkpoint
     print(f"Loading checkpoint from {checkpoint_path}")
-    model = lightning_model.load_from_checkpoint(checkpoint_path).to("cpu")
+    model = lightning_model.load_from_checkpoint(checkpoint_path, map_location="cuda")
 
     with open("hparams.json", "w") as f:
         yaml.dump(model.hparams, f)
@@ -91,6 +93,10 @@ def model_save(
         input_data = (node_features,)
         input_names = ["node_features"]
         dynamic_axes = {"node_features": {0: "num_spacepoints"}}
+    elif "Filter" in model_name:
+        input_data = (node_features, edge_index)
+        input_names = ["node_features", "edge_index"]
+        dynamic_axes = {"nodes_features": {0: "num_spacepoints"}, "edge_index": {1, "num_edges"}}
     else:
         input_data = (node_features, edge_index, edge_features)
         input_names = ["node_features", "edge_index", "edge_features"]
