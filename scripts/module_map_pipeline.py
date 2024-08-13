@@ -26,7 +26,10 @@ from common_pipeline import common_pipeline
 @click.option('--select', default=False, is_flag=True)
 @click.option('--output','-o', type=str, default=".")
 @click.option('--no-phi-ovl-sps', is_flag=True, default=False)
-def main(data, modulemap, gnn, truth, debug, verbose, select, output, no_phi_ovl_sps):
+@click.option('--events', '-n', default=1, type=int)
+@click.option('--profile/--no-profile', default=False)
+def main(data, modulemap, gnn, truth, debug, verbose,
+         select, output, no_phi_ovl_sps, events, profile):
     print("Configuration:")
     pprint.pprint(locals())
     print()
@@ -55,9 +58,9 @@ def main(data, modulemap, gnn, truth, debug, verbose, select, output, no_phi_ovl
     gnnConfig = {
         "level": logLevel,
         "cut": 0.5,
-        "numFeatures": 12,
         "undirected": False,
         "modelPath": gnn,
+        "useEdgeFeatures": True,
     }
 
     edgeClassifiers = [
@@ -80,7 +83,8 @@ def main(data, modulemap, gnn, truth, debug, verbose, select, output, no_phi_ovl
         filterShortTracks = True,
     )
 
-    common_pipeline(data, gnn_alg_config, no_phi_ovl_sps, output, select, logLevel, truth)
+    common_pipeline(data, gnn_alg_config, no_phi_ovl_sps, output,
+                    select, logLevel, truth, events, profile)
 
 if "__main__" == __name__:
     main()

@@ -16,11 +16,11 @@ try_source $HOME/gnn/acts/build/python/setup.sh
 try_source $HOME/CERN/acts/build/python/setup.sh
 
 DATA=rel24/data/user.avallier.38040855.EXT0._000005.Dump_GNN4Itk.root
+#DATA=rel24/data/Dump_GNN4Itk.root
 
-$PREFIX python3 scripts/module_map_pipeline.py \
+$PREFIX python3 scripts/module_map_pipeline.py "$@" \
     --modulemap rel24/data/ModuleMap_rel24_ttbar_v5_89809evts \
     --data $DATA \
     --gnn rel24/data/gnn.pt \
     --output tmp/rel24/acts \
-    --no-phi-ovl-sps \
-    "$@"
+    #--no-phi-ovl-sps \

@@ -76,30 +76,36 @@ def main(data, gnn, filter, metric_learning, truth, debug, verbose, select, outp
             (getattr(e, f"PhiAngle{n}"),    3.14),
         ]
 
+    n_features_without_eta = len(feature_list)
+
+    feature_list.append((e.Eta, 1))
+
     metricLearningConfig = {
         "level": logLevel,
         "modelPath": metric_learning,
         "knnVal": 50, #knn_val is 300
         "rVal": 0.1,
-        "numFeatures": len(feature_list)
+        "selectedFeatures": range(n_features_without_eta),
     }
     graphConstructor = acts.examples.TorchMetricLearning(**metricLearningConfig)
 
     gnnConfig = {
         "level": logLevel,
         "cut": 0.5,
-        "numFeatures": len(feature_list),
+        "selectedFeatures": [0,1,2,-1,3,4,5,6,7,8],
         "undirected": False,
         "modelPath": gnn,
+        "useEdgeFeatures": True,
     }
 
     filterConfig = {
         "level": logLevel,
         "cut": 0.5,
-        "numFeatures": len(feature_list),
+        "selectedFeatures": range(n_features_without_eta),
         "undirected": False,
         "modelPath": filter,
         "nChunks": 10,
+        "useEdgeFeatures": False,
     }
 
     edgeClassifiers = [

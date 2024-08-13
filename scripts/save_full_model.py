@@ -37,6 +37,8 @@ def model_save(
         load_model_name = "JitableInteractionGNN2"
     if model_name == "Filter":
         load_model_name = "JitableFilter"
+    if model_name == "InteractionGNN2WithPyG":
+        load_model_name = "JitableInteractionGNN2WithPyG"
 
     lightning_model = getattr(getattr(stages, stage_name), load_model_name)
     if not issubclass(lightning_model, LightningModule):
@@ -57,10 +59,10 @@ def model_save(
             raise ValueError(f"No checkpoint found in {checkpoint_path}")
 
     # load the checkpoint
-    print(f"Loading checkpoint from {checkpoint_path}")
-    model = lightning_model.load_from_checkpoint(checkpoint_path, map_location="cuda")
+    print(f"Loading checkpoint from {checkpoint_path} with model {lightning_model}")
+    model = lightning_model.load_from_checkpoint(checkpoint_path, map_location="cpu")
 
-    with open("hparams.json", "w") as f:
+    with open("hparams.yaml", "w") as f:
         yaml.dump(model.hparams, f)
 
     try:
@@ -105,6 +107,7 @@ def model_save(
             "edge_index": {1: "num_edges"},
             "edge_features": {0: "num_edges"},
         }
+
 
     output = model(*input_data)
     print("sucessfully run model!")
