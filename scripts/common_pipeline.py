@@ -184,7 +184,7 @@ def common_pipeline(input_file, gnn_alg_config, no_phi_ovl_sps, output, select_t
 
     s.addWriter(
         acts.examples.CKFPerformanceWriter(
-            level=max(logLevel, acts.logging.DEBUG),
+            level=max(logLevel, acts.logging.INFO),
             inputParticles="particles_selected",
             inputTrackParticleMatching="tpm",
             inputParticleTrackMatching="ptm",
