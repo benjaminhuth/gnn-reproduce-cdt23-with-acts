@@ -2,11 +2,14 @@
 
 source setup_acorn.sh
 
+#export TORCH_LOGS=+dynamo
+#export TORCHDYNAMO_VERBOSE=1
+
 function convert {
     DIR=$(dirname $3)
 
     echo "convert $3 -> $DIR/$4"
-    python3 scripts/save_full_model.py \
+    python3 scripts/save_full_model.py "$@" \
         --model $1 \
         --stage $2 \
         --checkpoint $3
@@ -16,9 +19,9 @@ function convert {
 }
 
 
-#convert InteractionGNN2 edge_classifier "ctd23/data/GNN_IN2_epochs169.ckpt" gnn.pt
+convert InteractionGNN2 edge_classifier "ctd23/data/GNN_IN2_epochs169.ckpt" gnn.pt
 #convert InteractionGNN2 edge_classifier "rel24/data/best_latent128_LN--val_loss=0.000409-epoch=77.ckpt" gnn.pt
 
 #convert MetricLearning graph_construction "ctd23/data/best-11292882-f1_0.010190.ckpt" metric_learning.pt
 #convert Filter edge_classifier "./ctd23/data/best-11984324-auc=0.967753.ckpt" filter.pt
-convert InteractionGNN2WithPyG edge_classifier "./ctd23/data/best-21796495-val_loss=0.000755-epoch=91.ckpt" gnn_metric_learning.pt
+#convert InteractionGNN2WithPyG edge_classifier "./ctd23/data/best-21796495-val_loss=0.000755-epoch=91.ckpt" gnn_metric_learning.pt
