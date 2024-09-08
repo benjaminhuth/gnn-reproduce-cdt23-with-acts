@@ -14,7 +14,7 @@ from acts.examples.simulation import *
 
 from acts import UnitConstants as u
 
-from common_pipeline import common_pipeline
+from common_pipeline import *
 
 @click.command()
 @click.option('--data', help="Path to the ROOT file with dumped data", default=None)
@@ -28,8 +28,13 @@ from common_pipeline import common_pipeline
 @click.option('--no-phi-ovl-sps', is_flag=True, default=False)
 @click.option('--events', '-n', default=1, type=int)
 @click.option('--profile/--no-profile', default=False)
+@click.option('--fit/--no-fit', default=False)
+@click.option('--itk-pixel-data', default=None)
+@click.option('--itk-strip-data', default=None)
+@click.option('--itk-material-map', default=None)
 def main(data, modulemap, gnn, truth, debug, verbose,
-         select, output, no_phi_ovl_sps, events, profile):
+         select, output, no_phi_ovl_sps, events, profile,
+         fit, itk_pixel_data, itk_strip_data, itk_material_map):
     print("Configuration:")
     pprint.pprint(locals())
     print()
@@ -46,12 +51,25 @@ def main(data, modulemap, gnn, truth, debug, verbose,
     if verbose:
         logLevel = acts.logging.VERBOSE
 
+    itkEnvironment = None
+    if fit:
+        itkEnvironment = ItkEnvironment(
+            itk_pixel_data,
+            itk_strip_data,
+            itk_material_map,
+            logLevel,    
+        )
+
+    
     moduleMapConfig = {
         "level": logLevel,
         "moduleMapPath": modulemap,
         "rScale": 1000.0,
         "phiScale": 3.141592654,
         "zScale": 1000.0,
+        "useGpu": True,
+        "gpuDevice": 0,
+        "gpuBlocks": 512,
     }
     graphConstructor = acts.examples.ModuleMapCpp(**moduleMapConfig)
 
@@ -84,7 +102,7 @@ def main(data, modulemap, gnn, truth, debug, verbose,
     )
 
     common_pipeline(data, gnn_alg_config, no_phi_ovl_sps, output,
-                    select, logLevel, truth, events, profile)
+                    select, logLevel, truth, events, profile, itkEnvironment)
 
 if "__main__" == __name__:
     main()

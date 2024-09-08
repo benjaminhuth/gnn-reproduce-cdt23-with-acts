@@ -1,3 +1,5 @@
+*.csv
+*.txt
 events-hits.txt
 events-particles.txt
 setup_acorn.sh

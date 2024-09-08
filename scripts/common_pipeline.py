@@ -60,13 +60,66 @@ def plot_gpu_memory(inputFile, outputDir):
 
 
 
+class ItkEnvironment:
+    def __init__(self, pixelDatabase, stripDatabase, materialMap, logLevel=acts.logging.INFO):
+        from itk_from_geomodel_gen1 import ItkBuilder
 
-def common_pipeline(input_file, gnn_alg_config, no_phi_ovl_sps, output, select_tracks, logLevel, truth, events=1, profile=False):
+        self.logLevel = logLevel
+
+        assert Path(pixelDatabase).exists()
+        assert Path(stripDatabase).exists()
+        self.gctx = acts.GeometryContext()
+        self.itkBuilder = ItkBuilder(
+            pixelDatabase, stripDatabase,
+            applyModuleSplit=True, gctx=self.gctx,
+            logLevel=self.logLevel
+        )
+
+        mdec = acts.examples.RootMaterialDecorator(
+            fileName=materialMap,
+            level=self.logLevel,
+        )
+
+        self.trackingGeometry = self.itkBuilder.finalize(mdec)
+        self.field = acts.ConstantBField(
+            acts.Vector3(0, 0, 2 * acts.UnitConstants.T)
+        )
+
+    def get_geoid_map(self, events, input_file):
+        s = acts.examples.Sequencer(
+            events=events,
+            numThreads=1,
+        )
+
+        geometryIdMap = acts.examples.GeometryIdMapActsAthena()
+        s.addReader(
+            acts.examples.RootAthenaDumpGeoIdCollector(
+                level = self.logLevel,
+                treename  = "GNN4ITk",
+                inputfile = input_file,
+                geometryIdMap = geometryIdMap,
+                trackingGeometry = self.trackingGeometry,
+            )
+        )
+        s.run()
+        return geometryIdMap
+
+
+def common_pipeline(
+    input_file, gnn_alg_config, no_phi_ovl_sps,
+    output, select_tracks, logLevel, truth, events=1,
+    profile=False, itkEnvironment=None,
+):
     outputDir=Path(output)
     outputDir.mkdir(exist_ok=True)
     outputDirCsv = outputDir / "csv"
     outputDirCsv.mkdir(exist_ok=True)
 
+    # Make geo id mapping if we do the fitting
+    geometryIdMap = None
+    if itkEnvironment is not None:
+        geometryIdMap = itkEnvironment.get_geoid_map(events, input_file)
+    
     s = acts.examples.Sequencer(
         events=events,
         numThreads=1,
@@ -76,17 +129,19 @@ def common_pipeline(input_file, gnn_alg_config, no_phi_ovl_sps, output, select_t
     # Read Athena input space points and clusters from root file
     s.addReader(
         acts.examples.RootAthenaDumpReader(
-            level=max(logLevel, acts.logging.DEBUG),
+            level=logLevel,
             treename  = "GNN4ITk",
             inputfile = input_file,
             outputSpacePoints = "spacepoints",
             outputClusters = "clusters",
             outputMeasurements = "measurements",
-            outputMeasurementParticlesMap = "meas_part_map",
+            outputMeasurementParticlesMap = "measurement_particles_map",
             outputParticles = "particles",
             onlyPassedParticles = False,
             skipOverlapSPsPhi = no_phi_ovl_sps,
             skipOverlapSPsEta = False,
+            geometryIdMap = geometryIdMap,
+            trackingGeometry = None if itkEnvironment is None else itkEnvironment.trackingGeometry
         )
     )
 
@@ -102,7 +157,7 @@ def common_pipeline(input_file, gnn_alg_config, no_phi_ovl_sps, output, select_t
         ),
         inputParticles="particles",
         outputParticles="particles_selected",
-        inputMeasurementParticlesMap="meas_part_map",
+        inputMeasurementParticlesMap="measurement_particles_map",
     )
 
     if not truth:
@@ -113,7 +168,7 @@ def common_pipeline(input_file, gnn_alg_config, no_phi_ovl_sps, output, select_t
                     level=logLevel,
                     inputParticles="particles_selected",
                     inputSpacePoints="spacepoints",
-                    inputMeasurementParticlesMap="meas_part_map",
+                    inputMeasurementParticlesMap="measurement_particles_map",
                     outputGraph="truth_graph",
                     targetMinPT=1.0*u.GeV,
                     targetMinSize=3,
@@ -137,6 +192,7 @@ def common_pipeline(input_file, gnn_alg_config, no_phi_ovl_sps, output, select_t
                 inputClusters="clusters",
                 outputProtoTracks="gnn_prototracks",
                 inputTruthGraph="truth_graph",
+                geometryIdMap = geometryIdMap,
                 **gnn_alg_config,
             )
         )
@@ -145,19 +201,40 @@ def common_pipeline(input_file, gnn_alg_config, no_phi_ovl_sps, output, select_t
             acts.examples.TruthTrackFinder(
                 level=logLevel,
                 inputParticles="particles",
-                inputMeasurementParticlesMap="meas_part_map",
+                inputMeasurementParticlesMap="measurement_particles_map",
                 outputProtoTracks="gnn_prototracks"
             )
         )
 
-    s.addAlgorithm(
-        acts.examples.PrototracksToTracks(
-            level=logLevel,
-            inputProtoTracks="gnn_prototracks",
-            inputMeasurements="measurements",
-            outputTracks="tracks",
+    if itkEnvironment is None:
+        s.addAlgorithm(
+            acts.examples.PrototracksToTracks(
+                level=logLevel,
+                inputProtoTracks="gnn_prototracks",
+                inputMeasurements="measurements",
+                outputTracks="tracks",
+            )
         )
-    )
+    else:
+        s.addAlgorithm(
+            acts.examples.PrototracksToParameters(
+                level=logLevel,
+                inputProtoTracks="gnn_prototracks",
+                inputSpacePoints="spacepoints",
+                outputProtoTracks="prototracks_with_params",
+                outputParameters="estimatedparameters",
+                magneticField=itkEnvironment.field,
+                geometry=itkEnvironment.trackingGeometry,
+                buildTightSeeds=True,
+            )
+        )
+
+        addKalmanTracks(
+            s,
+            itkEnvironment.trackingGeometry,
+            itkEnvironment.field,
+            inputProtoTracks="prototracks_with_params",
+        )
 
     if select_tracks:
         addTrackSelection(
@@ -175,7 +252,7 @@ def common_pipeline(input_file, gnn_alg_config, no_phi_ovl_sps, output, select_t
             level=max(logLevel, acts.logging.DEBUG),
             inputTracks="tracks_selected",
             inputParticles="particles_selected",
-            inputMeasurementParticlesMap="meas_part_map",
+            inputMeasurementParticlesMap="measurement_particles_map",
             outputTrackParticleMatching="tpm",
             outputParticleTrackMatching="ptm",
             doubleMatching=True,
@@ -222,11 +299,7 @@ def common_pipeline(input_file, gnn_alg_config, no_phi_ovl_sps, output, select_t
         ]
         gpu_profiler = subprocess.Popen(gpu_profiler_args)
 
-    try:
-        s.run()
-    except Exception as e:
-        print("ERROR in s.run()")
-        print(e)
+    s.run()
     del s
 
     if profile:

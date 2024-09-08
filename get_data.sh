@@ -25,7 +25,7 @@ MMT_FILE=$MM_PATH/ModuleMap_rel24_ttbar_v5_89809evts.triplets.root
 MMD_FILE=$MM_PATH/ModuleMap_rel24_ttbar_v5_89809evts.doublets.root
 #DUMP_FILE=/eos/user/b/bhuth/data/Dump_GNN4Itk.root
 #DUMP_FILE=/eos/atlas/atlascerngroupdisk/perf-idtracking/GNN4ITk/ATLAS-P2-RUN4-03-00-00_Rel.24/for_debug/user.avallier.37060564.EXT0._000001.Dump_GNN4Itk.root
-#DUMP_FILE2=/eos/atlas/atlascerngroupdisk/perf-idtracking/GNN4ITk/ATLAS-P2-RUN4-03-00-00_Rel.24/dumps/v5/ttbar/pu200/user.avallier.mc21_14TeV.601229.PhPy8EG_A14_ttbar_hdamp258p75_SingleLep.DumpGNN4ITk_v5.e8481_s4149_r14697_EXT0/user.avallier.38040855.EXT0._000005.Dump_GNN4Itk.root
+DUMP_FILE2=/eos/atlas/atlascerngroupdisk/perf-idtracking/GNN4ITk/ATLAS-P2-RUN4-03-00-00_Rel.24/dumps/v5/ttbar/pu200/user.avallier.mc21_14TeV.601229.PhPy8EG_A14_ttbar_hdamp258p75_SingleLep.DumpGNN4ITk_v5.e8481_s4149_r14697_EXT0/user.avallier.38040855.EXT0._000005.Dump_GNN4Itk.root
 DUMP_FILE=/eos/user/b/bhuth/data/user.avallier.38040858.EXT0._000124.Dump_GNN4Itk.root
 CKPT=/eos/user/s/scaillou/Rel24/model_store/edge_classifier/best_latent128_LN--val_loss=0.000409-epoch=77.ckpt
 
@@ -47,6 +47,7 @@ mkdir -p ctd23/data
 copy_file $MMD_FILE ./rel24/data
 copy_file $MMT_FILE ./rel24/data
 copy_file $DUMP_FILE ./rel24/data
+copy_file $DUMP_FILE2 ./rel24/data
 copy_file $CKPT ./rel24/data
 
 copy_file $CDT23_CKPT ./ctd23/data
