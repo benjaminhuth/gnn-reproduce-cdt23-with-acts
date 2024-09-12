@@ -1,20 +1,6 @@
 #!/bin/bash
 
-function try_source {
-    if [[ -f $1 ]]; then
-        source $1
-    else
-        echo "Could not source '$1'"
-    fi
-}
-
-
-export ACTS_SEQUENCER_DISABLE_FPEMON=1
-
-try_source $HOME/setup_lcg_cuda.sh
-try_source $HOME/gnn/acts/build/python/setup.sh
-try_source $HOME/CERN/acts/build/python/setup.sh
-try_source /root/acts/build/python/setup.sh
+source setup_acts.sh
 
 DATA=rel24/data/user.avallier.38040858.EXT0._000124.Dump_GNN4Itk.root
 #DATA=rel24/data/user.avallier.38040855.EXT0._000005.Dump_GNN4Itk.root

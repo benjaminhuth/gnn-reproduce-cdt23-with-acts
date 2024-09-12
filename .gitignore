@@ -3,6 +3,7 @@
 events-hits.txt
 events-particles.txt
 setup_acorn.sh
+setup_acts.sh
 *.root
 tmp
 ctd23/data
