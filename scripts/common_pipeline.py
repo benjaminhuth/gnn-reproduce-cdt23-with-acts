@@ -111,7 +111,7 @@ def common_pipeline(
     profile=False, itkEnvironment=None,
 ):
     outputDir=Path(output)
-    outputDir.mkdir(exist_ok=True)
+    outputDir.mkdir(exist_ok=True, parents=True)
     outputDirCsv = outputDir / "csv"
     outputDirCsv.mkdir(exist_ok=True)
 
@@ -141,7 +141,8 @@ def common_pipeline(
             skipOverlapSPsPhi = no_phi_ovl_sps,
             skipOverlapSPsEta = False,
             geometryIdMap = geometryIdMap,
-            trackingGeometry = None if itkEnvironment is None else itkEnvironment.trackingGeometry
+            trackingGeometry = None if itkEnvironment is None else itkEnvironment.trackingGeometry,
+            absBoundaryTolerance = 2 * u.mm,
         )
     )
 
@@ -207,12 +208,13 @@ def common_pipeline(
         )
 
     if itkEnvironment is None:
+        track_key = "nonfitted_tracks"
         s.addAlgorithm(
             acts.examples.PrototracksToTracks(
                 level=logLevel,
                 inputProtoTracks="gnn_prototracks",
                 inputMeasurements="measurements",
-                outputTracks="tracks",
+                outputTracks=track_key,
             )
         )
     else:
@@ -225,32 +227,34 @@ def common_pipeline(
                 outputParameters="estimatedparameters",
                 magneticField=itkEnvironment.field,
                 geometry=itkEnvironment.trackingGeometry,
-                buildTightSeeds=True,
+                buildTightSeeds=False,
             )
         )
 
+        track_key = "kf_tracks"
         addKalmanTracks(
             s,
             itkEnvironment.trackingGeometry,
             itkEnvironment.field,
             inputProtoTracks="prototracks_with_params",
         )
-
+    
     if select_tracks:
+        selected_key = "gnn_key_selected"
         addTrackSelection(
             s,
             TrackSelectorConfig(nMeasurementsMin=7),
-            inputTracks="tracks",
-            outputTracks="tracks_selected",
+            inputTracks=track_key,
+            outputTracks=selected_key,
             logLevel=logLevel,
         )
     else:
-        s.addWhiteboardAlias("tracks_selected", "tracks")
+        selected_key = track_key
 
     s.addAlgorithm(
         acts.examples.TrackTruthMatcher(
             level=max(logLevel, acts.logging.DEBUG),
-            inputTracks="tracks_selected",
+            inputTracks=selected_key,
             inputParticles="particles_selected",
             inputMeasurementParticlesMap="measurement_particles_map",
             outputTrackParticleMatching="tpm",
@@ -265,7 +269,7 @@ def common_pipeline(
             inputParticles="particles_selected",
             inputTrackParticleMatching="tpm",
             inputParticleTrackMatching="ptm",
-            inputTracks="tracks_selected",
+            inputTracks=selected_key,
             filePath=outputDir/"performance.root",
         )
     )
