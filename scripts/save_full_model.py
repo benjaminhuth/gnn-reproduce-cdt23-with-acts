@@ -14,24 +14,52 @@ As of writing, 2024/02/27, it supports the following models:
 from __future__ import annotations
 
 from pathlib import Path
+import os
+import pprint
+import shutil
+import subprocess
+import tempfile
 
 import torch
+import torch._dynamo
+
 import yaml
 from pytorch_lightning import LightningModule
 
 from acorn import stages
 from acorn.core.core_utils import find_latest_checkpoint
 
+import click
+
+# TODO this is switched of below (by me?)... Why???
 torch.use_deterministic_algorithms(True)
 
+@click.command()
+@click.option("--config", type=str, help="configuration file", default=None)
+@click.option("-c", "--checkpoint", type=str, help="checkpoint path", default=None)
+@click.option("-o", "--output", type=str, help="Output path", default=".")
+@click.option("--tag", type=str, default=None, help="version name")
+@click.option("--stage", type=str, help="configuration file", default=None)
+@click.option("--model-name", type=str, help="configuration file", default=None)
+@click.option("--torch-script/--no-torch-script", default=False)
+@click.option("--torch-compile/--no-torch-compile", default=False)
+@click.option("--onnx/--no-onnx", default=False)
+def main(config, checkpoint, output, tag, stage, model_name, torch_script, torch_compile, onnx):
+    pprint.pprint(locals())
+    if checkpoint is not None:
+        checkpoint_path = Path(checkpoint)
+    else:
+        config_file = Path(config)
+        if not config_file.exists():
+            raise FileNotFoundError(f"Config file {config_file} not found")
 
-def model_save(
-    stage_name: str,
-    model_name: str,
-    checkpoint_path: str | Path,
-    output_path: str,
-    tag_name: str | None = None,
-):
+        with open(config_file) as f:
+            config = yaml.safe_load(f)
+
+        stage = config["stage"]
+        model = config["model"]
+        checkpoint_path = Path(config["stage_dir"]) / "artifacts"
+
     load_model_name = model_name
     if model_name == "InteractionGNN2":
         load_model_name = "JitableInteractionGNN2"
@@ -40,7 +68,7 @@ def model_save(
     if model_name == "InteractionGNN2WithPyG":
         load_model_name = "JitableInteractionGNN2WithPyG"
 
-    lightning_model = getattr(getattr(stages, stage_name), load_model_name)
+    lightning_model = getattr(getattr(stages, stage), load_model_name)
     if not issubclass(lightning_model, LightningModule):
         raise ValueError(f"Model {model_name} is not a LightningModule")
 
@@ -71,9 +99,8 @@ def model_save(
         pass
     print("node features:", model.hparams["node_features"])
 
-
     # save for use in production environment
-    out_path = Path(output_path)
+    out_path = Path(output)
     if not out_path.exists():
         out_path.mkdir(parents=True, exist_ok=True)
 
@@ -82,14 +109,14 @@ def model_save(
     num_edges = 2000
     spacepoint_features = len(model.hparams["node_features"])
 
-    node_features = torch.rand(num_spacepoints, spacepoint_features).to(torch.float32)
+    node_features = torch.rand(num_spacepoints, spacepoint_features).to(torch.float32).cuda()
     try:
         n_edge_features = len(model.hparams["edge_features"])
-        edge_features = torch.rand(num_edges, n_edge_features)
+        edge_features = torch.rand(num_edges, n_edge_features).cuda()
     except:
         edge_features = None
 
-    edge_index = torch.randint(0, 100, (2, num_edges)).to(torch.int64)
+    edge_index = torch.randint(0, 100, (2, num_edges)).to(torch.int64).cuda()
 
     if "MetricLearning" in model_name:
         input_data = (node_features,)
@@ -103,84 +130,129 @@ def model_save(
         input_data = (node_features, edge_index, edge_features)
         input_names = ["node_features", "edge_index", "edge_features"]
         dynamic_axes = {
-            "node_features": {0: "num_spacepoints"},
+            "x": {0: "num_spacepoints"},
             "edge_index": {1: "num_edges"},
-            "edge_features": {0: "num_edges"},
+            "edge_attr": {0: "num_edges"},
         }
 
+    torch.use_deterministic_algorithms(False)
+    model.cuda()
 
     output = model(*input_data)
     print("sucessfully run model!")
 
-    torch_script_path = (
-        out_path / f"{stage_name}-{model_name}-{tag_name}.pt"
-        if tag_name
-        else out_path / f"{stage_name}-{model_name}.pt"
-    )
+    ##########################
+    # Do torch script export #
+    ##########################
+    if torch_script:
+        with torch.jit.optimized_execution(True):
+            script = model.to_torchscript(example_inputs=input_data, method='trace')
 
-    # exporting to torchscript
-    with torch.jit.optimized_execution(True):
-        script = model.to_torchscript(example_inputs=input_data, method='trace')
+        new_output = script(*input_data)
+        torch.jit.freeze(script)
+        if not new_output.equal(output):
+            print("WARNING!!! outputs are not identical")
 
-    new_output = script(*input_data)
-    torch.jit.freeze(script)
-    assert new_output.equal(output)
+        # save the model
+        torch_script_path = (
+            out_path / f"{stage}-{model_name}-{tag}.pt"
+            if tag
+            else out_path / f"{stage}-{model_name}.pt"
+        )
 
-    # save the model
-    print(f"Saving model to {torch_script_path}")
-    torch.jit.save(script, torch_script_path)
-    print(f"Done saving model to {torch_script_path}")
+        print(f"Saving model to {torch_script_path}")
+        torch.jit.save(script, torch_script_path)
+        print(f"Done saving model to {torch_script_path}")
+
+
+    ###########################
+    # Do torch compile export #
+    ###########################
+    if torch_compile:
+        # def try_compile(el, *args, **kwargs):
+        #     try:
+        #         compiled = torch.compile(el, *args, **kwargs)
+        #         print(f"Compiled {el.__repr__()[:11]}")
+        #         return compiled
+        #     except:
+        #         print(f"Couldn't compile {el.__name__}")
+        #         return el
+        #
+        # #torch._dynamo.config.suppress_errors = True
+        # print("Try to compile parts of the model!")
+        # model.edge_encoder = try_compile(model.edge_encoder, dynamic=True)
+        # for i in range(len(model.edge_network)):
+        #     model.edge_network[i] = try_compile(model.edge_network[i], dynamic=True)
+        # for i in range(len(model.node_network)):
+        #     model.node_network[i] = try_compile(model.node_network[i], dynamic=True)
+        # model.edge_decoder = try_compile(model.edge_decoder, dynamic=True)
+        # model.edge_output_transform = try_compile(model.edge_output_transform, dynamic=True)
+
+        dynamic_axes_torch = {}
+        for ax, info  in dynamic_axes.items():
+            dynamic_axes_torch[ax] = {}
+            for idx, name in info.items():
+                dynamic_axes_torch[ax][idx] = torch.export.Dim(name)
+
+        print(dynamic_axes_torch)
+
+        torch_so_path = (
+            out_path / f"{stage}-{model_name}-{tag}.so"
+            if tag
+            else out_path / f"{stage}-{model_name}.so"
+        )
+
+        with torch.no_grad():
+            tmp_so_path = torch._export.aot_compile(
+                model,
+                input_data,
+                dynamic_shapes=dynamic_axes_torch,
+                #options={"aot_inductor.output_path": str(torch_so_path)},
+            )
+        tmp_cpp_file = Path(tmp_so_path.replace(".so", ".cpp"))
+        assert tmp_cpp_file.exists()
+
+        tmp_files = [ f for f in os.listdir(tmp_cpp_file.parent) if not (f in tmp_so_path.replace(".so",".o")) and f[-2:] == ".o" ]
+        assert len(tmp_files) == 1
+        other_obj_file = tmp_cpp_file.parent / tmp_files[0]
+
+        torch_include = "/root/software/libtorch/include"
+        torch_include2 = "/root/software/libtorch/include/torch/csrc/api/include"
+        torch_libdir = "/root/software/libtorch/lib"
+
+        cuda_include = "/root/software/cuda-12.1/include"
+        cuda_libdir = "/root/software/cuda-12.1/lib64"
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_dir = Path(tmp_dir)
+
+            compile_cmd = f"g++ {tmp_cpp_file} -fPIC -Wall -std=c++20 -Wno-unused-variable -Wno-unknown-pragmas -I{torch_include} -I{torch_include2} -I{cuda_include} -mavx2 -mfma -D CPU_CAPABILITY_AVX2 -D USE_CUDA -O3 -DNDEBUG -ffast-math -fno-finite-math-only -fno-unsafe-math-optimizations -ffp-contract=off -march=native -fopenmp -D TORCH_INDUCTOR_CPP_WRAPPER -D C10_USING_CUSTOM_GENERATED_MACROS -c -o {tmp_dir / 'model.o'}"
+            subprocess.run(compile_cmd.split(" ")).check_returncode()
+
+            link_cmd = f"g++ {tmp_dir / 'model.o'} {other_obj_file} -shared -fPIC -Wall -std=c++17 -Wno-unused-variable -Wno-unknown-pragmas -L{torch_libdir} -L{cuda_libdir} -ltorch -ltorch_cpu -lgomp -lc10_cuda -lcuda -ltorch_cuda -lc10 -mavx2 -mfma -D CPU_CAPABILITY_AVX2 -D USE_CUDA -O3 -DNDEBUG -ffast-math -fno-finite-math-only -fno-unsafe-math-optimizations -ffp-contract=off -march=native -fopenmp -D TORCH_INDUCTOR_CPP_WRAPPER -D C10_USING_CUSTOM_GENERATED_MACROS -o {torch_so_path}"
+            print("Link command:", link_cmd)
+            subprocess.run(link_cmd.split(" ")).check_returncode()
 
     # try to save the model to ONNX
-    try:
+    if onnx:
         print("Trying to save the model to ONNX")
         onnx_path = (
-            out_path / f"{stage_name}-{model_name}-{tag_name}.onnx"
+            out_path / f"{stage}-{model_name}-{tag}.onnx"
             if tag_name
-            else out_path / f"{stage_name}-{model_name}.onnx"
+            else out_path / f"{stage}-{model_name}.onnx"
         )
+
         torch.onnx.export(
             model,
             input_data,
             onnx_path,
-            verbose=False,
+            verbose=True,
             input_names=input_names,
             output_names=["output"],
             dynamic_axes=dynamic_axes,
         )
         print(f"Done saving model to {onnx_path}")
-    except Exception as e:
-        print(f"Failed to save the model to ONNX: {e}")
 
 
 if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Save a model from a checkpoint")
-    parser.add_argument("--config", type=str, help="configuration file")
-    parser.add_argument("-o", "--output", type=str, help="Output path", default=".")
-    parser.add_argument("--tag", type=str, default=None, help="version name")
-    parser.add_argument(
-        "-c", "--checkpoint", type=str, help="checkpoint path", default=None
-    )
-    parser.add_argument("--stage", type=str, help="configuration file")
-    parser.add_argument("--model", type=str, help="configuration file")
-    args = parser.parse_args()
-
-    if args.checkpoint:
-        checkpoint = Path(args.checkpoint)
-        stage = args.stage
-        model = args.model
-    else:
-        config_file = Path(args.config)
-        if not config_file.exists():
-            raise FileNotFoundError(f"Config file {config_file} not found")
-
-        with open(config_file) as f:
-            config = yaml.safe_load(f)
-
-        stage = config["stage"]
-        model = config["model"]
-        checkpoint = Path(config["stage_dir"]) / "artifacts"
-
-    model_save(stage, model, checkpoint, args.output, args.tag)
+    main()

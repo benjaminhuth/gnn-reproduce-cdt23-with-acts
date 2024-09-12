@@ -81,8 +81,11 @@ def main(data, modulemap, gnn, truth, debug, verbose,
         "useEdgeFeatures": True,
     }
 
+    assert ".pt" in gnn or ".so" in gnn
+    EdgeClassifier = acts.examples.TorchEdgeClassifier if ".pt" in gnn else acts.examples.TorchEdgeClassifierAOT
+
     edgeClassifiers = [
-        acts.examples.TorchEdgeClassifier(**gnnConfig),
+        EdgeClassifier(**gnnConfig),
     ]
     trackBuilder = acts.examples.BoostTrackBuilding(logLevel)
 
