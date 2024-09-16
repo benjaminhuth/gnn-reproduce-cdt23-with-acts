@@ -11,7 +11,7 @@ $PREFIX python3 scripts/module_map_pipeline.py "$@" \
     --data $DATA \
     --gnn rel24/data/gnn.pt \
     --output tmp/rel24/acts \
-    --no-phi-ovl-sps \
-    --itk-material-map $ITK_ROOT/itk_geometry/itk_material.root \
+    --itk-material-map $ITK_ROOT/itk_geometry/itk_material_map.root \
     --itk-pixel-data $ITK_ROOT/itk_geometry/ITKPixels.db \
-    --itk-strip-data $ITK_ROOT/itk_geometry/ITKStrips.db 
+    --itk-strip-data $ITK_ROOT/itk_geometry/ITKStrips.db \
+    --no-phi-ovl-sps

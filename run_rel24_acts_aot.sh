@@ -11,4 +11,4 @@ $PREFIX python3 scripts/module_map_pipeline.py "$@" \
     --data $DATA \
     --gnn rel24/data/gnn.test.so \
     --output tmp/rel24/acts \
-    #--no-phi-ovl-sps \
+    --no-phi-ovl-sps
