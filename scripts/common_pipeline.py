@@ -59,6 +59,43 @@ def plot_gpu_memory(inputFile, outputDir):
     fig.savefig(outputDir / "gpu_memory_profile.png")
 
 
+def maybe_select_and_write_performance(s, tracks_key, outputDir, logLevel, select_tracks=True):
+    if select_tracks:
+        selected_key = tracks_key + "_selected"
+        addTrackSelection(
+            s,
+            TrackSelectorConfig(nMeasurementsMin=7),
+            inputTracks=tracks_key,
+            outputTracks=selected_key,
+            logLevel=logLevel,
+        )
+    else:
+        selected_key = tracks_key
+
+    s.addAlgorithm(
+        acts.examples.TrackTruthMatcher(
+            level=max(logLevel, acts.logging.DEBUG),
+            inputTracks=selected_key,
+            inputParticles="particles_selected",
+            inputMeasurementParticlesMap="measurement_particles_map",
+            outputTrackParticleMatching=tracks_key + "_tpm",
+            outputParticleTrackMatching=tracks_key + "_ptm",
+            doubleMatching=True,
+        )
+    )
+
+    s.addWriter(
+        acts.examples.CKFPerformanceWriter(
+            level=max(logLevel, acts.logging.INFO),
+            inputParticles="particles_selected",
+            inputTrackParticleMatching=tracks_key + "_tpm",
+            inputParticleTrackMatching=tracks_key + "_ptm",
+            inputTracks=selected_key,
+            filePath=outputDir / f"performance_{tracks_key}.root",
+        )
+    )
+
+
 
 class ItkEnvironment:
     def __init__(self, pixelDatabase, stripDatabase, materialMap, logLevel=acts.logging.INFO):
@@ -123,7 +160,7 @@ def common_pipeline(
     s = acts.examples.Sequencer(
         events=events,
         numThreads=1,
-        outputDir = str(Path.cwd())
+        outputDir = outputDir,
     )
 
     # Read Athena input space points and clusters from root file
@@ -207,17 +244,24 @@ def common_pipeline(
             )
         )
 
-    if itkEnvironment is None:
-        track_key = "nonfitted_tracks"
-        s.addAlgorithm(
-            acts.examples.PrototracksToTracks(
-                level=logLevel,
-                inputProtoTracks="gnn_prototracks",
-                inputMeasurements="measurements",
-                outputTracks=track_key,
-            )
+    s.addAlgorithm(
+        acts.examples.PrototracksToTracks(
+            level=logLevel,
+            inputProtoTracks="gnn_prototracks",
+            inputMeasurements="measurements",
+            outputTracks="non_fitted_tracks",
         )
-    else:
+    )
+
+    maybe_select_and_write_performance(
+        s,
+        tracks_key="non_fitted_tracks",
+        logLevel=logLevel,
+        outputDir=outputDir,
+        select_tracks=select_tracks
+    )
+
+    if itkEnvironment is not None:
         s.addAlgorithm(
             acts.examples.PrototracksToParameters(
                 level=logLevel,
@@ -231,7 +275,6 @@ def common_pipeline(
             )
         )
 
-        track_key = "kf_tracks"
         addKalmanTracks(
             s,
             itkEnvironment.trackingGeometry,
@@ -239,58 +282,31 @@ def common_pipeline(
             inputProtoTracks="prototracks_with_params",
         )
     
-    if select_tracks:
-        selected_key = "gnn_key_selected"
-        addTrackSelection(
+        maybe_select_and_write_performance(
             s,
-            TrackSelectorConfig(nMeasurementsMin=7),
-            inputTracks=track_key,
-            outputTracks=selected_key,
+            tracks_key="kf_tracks",
             logLevel=logLevel,
+            outputDir=outputDir,
+            select_tracks=select_tracks,
         )
-    else:
-        selected_key = track_key
 
-    s.addAlgorithm(
-        acts.examples.TrackTruthMatcher(
-            level=max(logLevel, acts.logging.DEBUG),
-            inputTracks=selected_key,
-            inputParticles="particles_selected",
-            inputMeasurementParticlesMap="measurement_particles_map",
-            outputTrackParticleMatching="tpm",
-            outputParticleTrackMatching="ptm",
-            doubleMatching=True,
-        )
-    )
-
-    s.addWriter(
-        acts.examples.CKFPerformanceWriter(
-            level=max(logLevel, acts.logging.INFO),
-            inputParticles="particles_selected",
-            inputTrackParticleMatching="tpm",
-            inputParticleTrackMatching="ptm",
-            inputTracks=selected_key,
-            filePath=outputDir/"performance.root",
-        )
-    )
-
-    s.addWriter(
-        acts.examples.CsvSpacepointWriter(
-            level=logLevel,
-            inputSpacepoints="spacepoints",
-            outputDir=outputDirCsv,
-        )
-    )
-
-    if not truth:
         s.addWriter(
-            acts.examples.CsvExaTrkXGraphWriter(
+            acts.examples.CsvSpacepointWriter(
                 level=logLevel,
-                inputGraph="truth_graph",
-                outputStem="truth-graph",
+                inputSpacepoints="spacepoints",
                 outputDir=outputDirCsv,
             )
         )
+
+        if not truth:
+            s.addWriter(
+                acts.examples.CsvExaTrkXGraphWriter(
+                    level=logLevel,
+                    inputGraph="truth_graph",
+                    outputStem="truth-graph",
+                    outputDir=outputDirCsv,
+                )
+            )
 
     if profile:
         profile_file = outputDir / "gpu_memory_profile.csv"
