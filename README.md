@@ -1,5 +1,6 @@
 # gnn-reproduce-cdt23-with-acts
 
+Scripts for running the GNN4ITk chain in ACTS standalone.
 
 ## Setup
 
