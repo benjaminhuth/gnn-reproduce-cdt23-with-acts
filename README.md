@@ -29,4 +29,4 @@ Scripts for running the GNN4ITk chain in ACTS standalone.
 * Required files:
   * Root files with event data
   * serialized NNs in torchscript format `(*.pt)`
-
+  * Optionally: GeoModel ITk databases for pixel and strips
