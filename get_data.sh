@@ -29,6 +29,8 @@ DUMP_FILE2=/eos/atlas/atlascerngroupdisk/perf-idtracking/GNN4ITk/ATLAS-P2-RUN4-0
 DUMP_FILE=/eos/user/b/bhuth/data/user.avallier.38040858.EXT0._000124.Dump_GNN4Itk.root
 CKPT=/eos/user/s/scaillou/Rel24/model_store/edge_classifier/best_latent128_LN--val_loss=0.000409-epoch=77.ckpt
 
+SINGLE_MUON_FILE=/eos/user/p/pibutti/sw/GNN4Itk/gnn/muon_10pT_nominal/Dump_GNN4Itk__1.root
+
 # CTD 23
 CDT23_CKPT=/eos/user/s/scaillou/CTD_2023/model_store/gnn/GNN_IN2_epochs169.ckpt
 #CDT23_MM=/eos/user/s/scaillou/CTD_2023/model_store/module_map/MMtriplet_1GeV_3hits_noE__merged__sorted.txt
@@ -40,6 +42,8 @@ CDT23_MLM=/eos/user/b/bhuth/data/ctd23_models/best-11292882-f1_0.010190.ckpt
 CDT23_FLT="/eos/user/b/bhuth/data/ctd23_models/best-11984324-auc=0.967753.ckpt"
 CDT23_GNN_ML="/eos/user/b/bhuth/data/ctd23_models/best-21796495-val_loss=0.000755-epoch=91.ckpt"
 
+
+
 # Copy
 mkdir -p rel24/data
 mkdir -p ctd23/data
@@ -49,6 +53,7 @@ copy_file $MMT_FILE ./rel24/data
 copy_file $DUMP_FILE ./rel24/data
 copy_file $DUMP_FILE2 ./rel24/data
 copy_file $CKPT ./rel24/data
+copy_file $SINGLE_MUON_FILE ./rel24/data
 
 copy_file $CDT23_CKPT ./ctd23/data
 #copy_file $CDT23_MM ./ctd23/data
