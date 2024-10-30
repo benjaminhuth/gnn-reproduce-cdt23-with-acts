@@ -1,0 +1,38 @@
+# CommonFramework configuration
+stage: data_reading
+model: AthenaRootReader
+input_dir: rel24/data
+stage_dir: tmp/single_muons/feature_store
+
+max_workers: 1
+
+input_sets:
+    train: rel24/config/trainset_single_muons.txt
+    valid: rel24/config/evalset_single_muons.txt
+    test:  rel24/config/testset_single_muons.txt
+
+
+# Feature Configurations
+feature_sets:
+    hit_features: [hit_id, x, y, z, r, phi, eta, region, module_id,
+                cluster_r_1, cluster_phi_1, cluster_z_1, cluster_r_2,
+                cluster_phi_2, cluster_z_2, cluster_eta_1, cluster_eta_2,
+                norm_x_1, norm_y_1, norm_x_2, norm_y_2, norm_z_1,
+                eta_angle_1, phi_angle_1, eta_angle_2, phi_angle_2, norm_z_2]
+    track_features: [particle_id, eta_particle, pt, radius, primary, nhits, pdgId, redundant_split_edges]
+    edge_features: [dr, dphi, dz, deta, phislope, rphislope]
+
+region_labels:
+    1: {hardware: PIXEL, barrel_endcap: -2}
+    2: {hardware: STRIP, barrel_endcap: -2}
+    3: {hardware: PIXEL, barrel_endcap: 0}
+    4: {hardware: STRIP, barrel_endcap: 0}
+    5: {hardware: PIXEL, barrel_endcap: 2}
+    6: {hardware: STRIP, barrel_endcap: 2}
+
+column_lookup:
+    coordinates: [cluster_id, hardware, cluster_x, cluster_y, cluster_z]
+    region: [barrel_endcap, layer_disk, eta_module, phi_module, side]
+    norms: [norm_x, norm_y, norm_z]
+    shape_a: [count, charge_count, loc_eta, loc_phi, localDir0, localDir1, localDir2, lengthDir0, lengthDir1, lengthDir2, glob_eta, glob_phi, eta_angle, phi_angle]
+    shape_b: [eta_angle, phi_angle]

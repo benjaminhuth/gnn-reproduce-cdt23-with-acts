@@ -1,13 +1,15 @@
 #!/bin/bash
 
 #source $HOME/setup_lcg_cuda.sh
-export LD_LIBRARY_PATH=$HOME/software/ModuleMapGraph/lib64:$LD_LIBRARY_PATH
+export MMG_ROOT=$HOME/software/ModuleMapGraph
+export LD_LIBRARY_PATH=$MMG_ROOT/lib64:$LD_LIBRARY_PATH
 
 mkdir -p tmp/rel24/standalone
 
 INPUT_DIR=tmp/rel24/feature_store/trainset
 
-$PREFIX $HOME/software/ModuleMapGraph/bin/GraphBuilder.exe \
+$PREFIX $MMG_ROOT/bin/GraphBuilder.cu.exe \
+    --gpu-nb-blocks=512 \
     --input-dir=$INPUT_DIR \
     --input-filename-pattern="event" \
     --output-dir=tmp/rel24/standalone \
@@ -17,15 +19,7 @@ $PREFIX $HOME/software/ModuleMapGraph/bin/GraphBuilder.exe \
     --save-graph-on-disk-npz=0 \
     --save-graph-on-disk-pyg=0 \
     --save-graph-on-disk-csv=1 \
-    --min-nhits=0 \
-    --min-pt-cut=0 \
-    --max-pt-cut=1000000 \
-    --phi-slice=0 \
-    --cut1-phi-slice=0 \
-    --cut2-phi-slice=0 \
-    --eta-region=0 \
-    --cut1-eta=0 \
-    --cut2-eta=0 \
     --strip-hit-pair=0 \
-    --extra-features=0
+    --extra-features=0 \
+    --gpu-nb-events=1
 

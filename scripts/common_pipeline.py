@@ -53,18 +53,19 @@ def plot_gpu_memory(inputFile, outputDir):
     ax.set_xlabel("wall clock time [s]")
     ax.set_ylabel("GPU used memory [MiB]")
     ax.set_title("GPU memory usage")
+    ax.set_ylim(0, ax.get_ylim()[1])
     ax.legend()
 
     fig.tight_layout()
     fig.savefig(outputDir / "gpu_memory_profile.png")
 
 
-def maybe_select_and_write_performance(s, tracks_key, outputDir, logLevel, select_tracks=True):
+def maybe_select_and_write_performance(s, tracks_key, outputDir, logLevel, select_tracks, require_ref_surface):
     if select_tracks:
         selected_key = tracks_key + "_selected"
         addTrackSelection(
             s,
-            TrackSelectorConfig(nMeasurementsMin=7),
+            TrackSelectorConfig(nMeasurementsMin=7, requireReferenceSurface=require_ref_surface),
             inputTracks=tracks_key,
             outputTracks=selected_key,
             logLevel=logLevel,
@@ -74,7 +75,7 @@ def maybe_select_and_write_performance(s, tracks_key, outputDir, logLevel, selec
 
     s.addAlgorithm(
         acts.examples.TrackTruthMatcher(
-            level=max(logLevel, acts.logging.DEBUG),
+            level=max(logLevel, acts.logging.INFO),
             inputTracks=selected_key,
             inputParticles="particles_selected",
             inputMeasurementParticlesMap="measurement_particles_map",
@@ -98,19 +99,52 @@ def maybe_select_and_write_performance(s, tracks_key, outputDir, logLevel, selec
 
 
 class ItkEnvironment:
-    def __init__(self, pixelDatabase, stripDatabase, materialMap, logLevel=acts.logging.INFO):
-        from itk_from_geomodel_gen1 import ItkBuilder
+    def __init__(self, file1, file2, materialMap, logLevel=acts.logging.INFO):
+        from itk_from_geomodel_gen1 import ItkBuilderGeomodel
+        from itk_from_json_gen1 import ItkBuilderJson
 
         self.logLevel = logLevel
 
-        assert Path(pixelDatabase).exists()
-        assert Path(stripDatabase).exists()
+        assert Path(file1).exists()
+        assert Path(file2).exists()
         self.gctx = acts.GeometryContext()
-        self.itkBuilder = ItkBuilder(
-            pixelDatabase, stripDatabase,
-            applyModuleSplit=True, gctx=self.gctx,
-            logLevel=self.logLevel
-        )
+      
+        if "FRANKENSTEIN_ITK" in os.environ:
+            p = Path("/root/itk_gen1/itk_geometry")
+            
+            self.gmBuilder = ItkBuilderGeomodel(
+                str(p / "ITKPixels.db"), str(p / "ITKStrips.db"), True, self.gctx, self.logLevel
+            )
+            print("Done with GeoModel part")
+
+
+            self.gmBuilder.index_hierarchy.settings.allow_insertion = True
+
+            self.jsonBuilder = ItkBuilderJson(
+                str(p / "athena_surfaces.json"),
+                str(p / "athena_transforms.csv"),
+                self.gctx, self.logLevel
+            )
+            print("Done with JSON part")
+
+            from itk_frankenstein_gen1 import ItkBuilderFrankenstein
+            self.itkBuilder = ItkBuilderFrankenstein(
+                index_hierarchy=self.jsonBuilder.index_hierarchy,
+                index_hierarchy_endcaps=self.gmBuilder.index_hierarchy,
+                gctx=self.gctx,
+                logLevel=self.logLevel
+            )
+        else:
+            if ".json" in file1:
+                ItkBuilder = ItkBuilderJson
+                kwargs = {}
+            else:
+                ItkBuilder = ItkBuilderGeomodel
+                kwargs = { "applyModuleSplit": True }
+
+            self.itkBuilder = ItkBuilder(
+                file1, file2, gctx=self.gctx, logLevel=self.logLevel, **kwargs
+            )
 
         mdec = acts.examples.RootMaterialDecorator(
             fileName=materialMap,
@@ -122,10 +156,11 @@ class ItkEnvironment:
             acts.Vector3(0, 0, 2 * acts.UnitConstants.T)
         )
 
-    def get_geoid_map(self, events, input_file):
+    def get_geoid_map(self, events, skip, input_file):
         s = acts.examples.Sequencer(
             events=events,
             numThreads=1,
+            skip=skip,
         )
 
         geometryIdMap = acts.examples.GeometryIdMapActsAthena()
@@ -144,8 +179,8 @@ class ItkEnvironment:
 
 def common_pipeline(
     input_file, gnn_alg_config, no_phi_ovl_sps,
-    output, select_tracks, logLevel, truth, events=1,
-    profile=False, itkEnvironment=None,
+    output, select_tracks, logLevel, truth, events=1, skip=0,
+    profile=False, itkEnvironment=None, use_ckf=False,
 ):
     outputDir=Path(output)
     outputDir.mkdir(exist_ok=True, parents=True)
@@ -155,10 +190,11 @@ def common_pipeline(
     # Make geo id mapping if we do the fitting
     geometryIdMap = None
     if itkEnvironment is not None:
-        geometryIdMap = itkEnvironment.get_geoid_map(events, input_file)
+        geometryIdMap = itkEnvironment.get_geoid_map(events, skip, input_file)
     
     s = acts.examples.Sequencer(
         events=events,
+        skip=skip,
         numThreads=1,
         outputDir = outputDir,
     )
@@ -166,7 +202,7 @@ def common_pipeline(
     # Read Athena input space points and clusters from root file
     s.addReader(
         acts.examples.RootAthenaDumpReader(
-            level=logLevel,
+            level=max(logLevel, acts.logging.DEBUG),
             treename  = "GNN4ITk",
             inputfile = input_file,
             outputSpacePoints = "spacepoints",
@@ -188,23 +224,22 @@ def common_pipeline(
         ParticleSelectorConfig(
             pt=(1*u.GeV, None),
             rho=(0, 26*u.cm),
-            measurements=(3,None),
+            measurements=(3, None),
             excludeAbsPdgs=[11,],
             removeSecondaries=True,
             removeNeutral=True,
         ),
         inputParticles="particles",
-        outputParticles="particles_selected",
+        outputParticles="particles_selected_graph_metrics",
         inputMeasurementParticlesMap="measurement_particles_map",
     )
 
     if not truth:
         if True:
-            print("WARNING:      Use all particles as reference for truth graph, not target")
             s.addAlgorithm(
                 acts.examples.TruthGraphBuilder(
                     level=logLevel,
-                    inputParticles="particles_selected",
+                    inputParticles="particles_selected_graph_metrics",
                     inputSpacePoints="spacepoints",
                     inputMeasurementParticlesMap="measurement_particles_map",
                     outputGraph="truth_graph",
@@ -231,6 +266,7 @@ def common_pipeline(
                 outputProtoTracks="gnn_prototracks",
                 inputTruthGraph="truth_graph",
                 geometryIdMap = geometryIdMap,
+                minMeasurementsPerTrack = 7,
                 **gnn_alg_config,
             )
         )
@@ -253,12 +289,28 @@ def common_pipeline(
         )
     )
 
+    addParticleSelection(
+        s,
+        ParticleSelectorConfig(
+            pt=(1*u.GeV, None),
+            rho=(0, 26*u.cm),
+            measurements=(7 if select_tracks else 3, None),
+            excludeAbsPdgs=[11,],
+            removeSecondaries=True,
+            removeNeutral=True,
+        ),
+        inputParticles="particles",
+        outputParticles="particles_selected",
+        inputMeasurementParticlesMap="measurement_particles_map",
+    )
+    
     maybe_select_and_write_performance(
         s,
         tracks_key="non_fitted_tracks",
         logLevel=logLevel,
         outputDir=outputDir,
-        select_tracks=select_tracks
+        select_tracks=select_tracks,
+        require_ref_surface=False,
     )
 
     if itkEnvironment is not None:
@@ -275,38 +327,61 @@ def common_pipeline(
             )
         )
 
-        addKalmanTracks(
-            s,
-            itkEnvironment.trackingGeometry,
-            itkEnvironment.field,
-            inputProtoTracks="prototracks_with_params",
-        )
-    
+        if not use_ckf:
+            addKalmanTracks(
+                s,
+                itkEnvironment.trackingGeometry,
+                itkEnvironment.field,
+                inputProtoTracks="prototracks_with_params",
+            )
+        else:
+            s.addAlgorithm(
+                acts.examples.TrackFindingFromPrototrackAlgorithm(
+                    level=acts.logging.INFO,
+                    inputProtoTracks="prototracks_with_params",
+                    inputMeasurements="measurements",
+                    inputInitialTrackParameters="estimatedparameters",
+                    outputTracks="kf_tracks",
+                    measurementSelectorCfg=acts.MeasurementSelector.Config(
+                        #[(acts.GeometryIdentifier(), ([], [chi2Cut], [1], []))]
+                        [(acts.GeometryIdentifier(), acts.MeasurementSelectorCuts([], [100.0], [1], []))]
+                    ),
+                    trackingGeometry=itkEnvironment.trackingGeometry,
+                    magneticField=itkEnvironment.field,
+                    findTracks=acts.examples.TrackFindingAlgorithm.makeTrackFinderFunction(
+                        itkEnvironment.trackingGeometry,
+                        itkEnvironment.field,
+                        acts.logging.INFO,
+                    ),
+                )
+            )
+
         maybe_select_and_write_performance(
             s,
             tracks_key="kf_tracks",
             logLevel=logLevel,
             outputDir=outputDir,
             select_tracks=select_tracks,
+            require_ref_surface=True,
         )
 
+    s.addWriter(
+        acts.examples.CsvSpacepointWriter(
+            level=logLevel,
+            inputSpacepoints="spacepoints",
+            outputDir=outputDirCsv,
+        )
+    )
+
+    if not truth:
         s.addWriter(
-            acts.examples.CsvSpacepointWriter(
+            acts.examples.CsvExaTrkXGraphWriter(
                 level=logLevel,
-                inputSpacepoints="spacepoints",
+                inputGraph="truth_graph",
+                outputStem="truth-graph",
                 outputDir=outputDirCsv,
             )
         )
-
-        if not truth:
-            s.addWriter(
-                acts.examples.CsvExaTrkXGraphWriter(
-                    level=logLevel,
-                    inputGraph="truth_graph",
-                    outputStem="truth-graph",
-                    outputDir=outputDirCsv,
-                )
-            )
 
     if profile:
         profile_file = outputDir / "gpu_memory_profile.csv"

@@ -23,6 +23,8 @@ import tempfile
 import torch
 import torch._dynamo
 
+import numpy as np
+
 import yaml
 from pytorch_lightning import LightningModule
 
@@ -44,7 +46,9 @@ torch.use_deterministic_algorithms(True)
 @click.option("--torch-script/--no-torch-script", default=False)
 @click.option("--torch-compile/--no-torch-compile", default=False)
 @click.option("--onnx/--no-onnx", default=False)
-def main(config, checkpoint, output, tag, stage, model_name, torch_script, torch_compile, onnx):
+@click.option("--amp/--no-amp", default=False)
+@click.option("--sigmoid/--no-sigmoid", default=False)
+def main(config, checkpoint, output, tag, stage, model_name, torch_script, torch_compile, onnx, amp, sigmoid):
     pprint.pprint(locals())
     if checkpoint is not None:
         checkpoint_path = Path(checkpoint)
@@ -89,6 +93,13 @@ def main(config, checkpoint, output, tag, stage, model_name, torch_script, torch
     # load the checkpoint
     print(f"Loading checkpoint from {checkpoint_path} with model {lightning_model}")
     model = lightning_model.load_from_checkpoint(checkpoint_path, map_location="cpu")
+    
+    # set if we use amp
+    model.amp = amp
+    model.do_sigmoid = sigmoid
+
+    if sigmoid:
+        model_name = model_name + "_sigmoid"
 
     with open("hparams.yaml", "w") as f:
         yaml.dump(model.hparams, f)
@@ -128,14 +139,14 @@ def main(config, checkpoint, output, tag, stage, model_name, torch_script, torch
         dynamic_axes = {"nodes_features": {0: "num_spacepoints"}, "edge_index": {1, "num_edges"}}
     else:
         input_data = (node_features, edge_index, edge_features)
-        input_names = ["node_features", "edge_index", "edge_features"]
+        input_names = ["x", "edge_index", "edge_attr"]
         dynamic_axes = {
             "x": {0: "num_spacepoints"},
             "edge_index": {1: "num_edges"},
             "edge_attr": {0: "num_edges"},
         }
 
-    torch.use_deterministic_algorithms(False)
+    torch.use_deterministic_algorithms(True)
     model.cuda()
 
     output = model(*input_data)
@@ -235,10 +246,11 @@ def main(config, checkpoint, output, tag, stage, model_name, torch_script, torch
 
     # try to save the model to ONNX
     if onnx:
-        print("Trying to save the model to ONNX")
+        import onnx
+        print("Trying to save the model to ONNX", onnx.__version__)
         onnx_path = (
             out_path / f"{stage}-{model_name}-{tag}.onnx"
-            if tag_name
+            if tag
             else out_path / f"{stage}-{model_name}.onnx"
         )
 
@@ -246,11 +258,35 @@ def main(config, checkpoint, output, tag, stage, model_name, torch_script, torch
             model,
             input_data,
             onnx_path,
-            verbose=True,
+            verbose=False,
             input_names=input_names,
             output_names=["output"],
             dynamic_axes=dynamic_axes,
         )
+
+        input_data = (
+            input_data[0].cpu().detach().numpy(),
+            input_data[1].cpu().detach().numpy(),
+            input_data[2].cpu().detach().numpy()
+        )
+        
+        import onnxruntime as ort
+        session = ort.InferenceSession(onnx_path)
+        onnx_outputs = session.run(None, 
+                              {
+                                  'x': input_data[0], 
+                                  'edge_index': input_data[1], 
+                                  'edge_attr': input_data[2]
+                              })
+
+        if not np.isclose(onnx_outputs[0], output.cpu().detach().numpy(), rtol=0.0, atol=1.e-3).all():
+            print("WARNING      ONNX inference output is not close with 1.e-3")
+            mask = ~np.isclose(onnx_outputs[0], output.cpu().detach().numpy())
+            print("onnx",onnx_outputs[0][mask])
+            print("ref ",output.cpu().detach().numpy()[mask])
+        else:
+            print("Output of onnx runtime inference is close to reference")
+
         print(f"Done saving model to {onnx_path}")
 
 
