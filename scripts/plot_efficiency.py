@@ -1,55 +1,27 @@
 #!/usr/bin/env python
+import sys
+import yaml
 
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+plt.rcParams.update({'font.size': 14})
+
 
 import uproot
 import ROOT
 
-plt.rcParams.update({'font.size': 12})
+import os
 
-if True: #try:
-    timing = pd.read_csv("timing.csv")
-    timing["cum_sum"] = np.cumsum(timing["time_perevent_s"])
-    timing
-
-    timing_per_event = timing["time_perevent_s"].to_numpy()
-
-    finding_subtimings = [0.572, 0.312, 0.023]
-    finding_subparts = ["ModuleMap", "GNN", "CC"]
-
-    used_timings = [timing_per_event[3], timing_per_event[7], timing_per_event[8]]
-
-    xs = np.cumsum([0.0, *used_timings[:-1]])
-    print(xs)
-    print(used_timings)
-
-    plt.barh(3*[0.5], width=used_timings, left=xs, color=["tab:blue","tab:orange","tab:green"], label=["Track finding", "Parameter Estimation", "Kalman Filter"])
-
-    xs2 = np.cumsum([0.0, *finding_subtimings[:-1]])
-
-    fig, ax = plt.subplots(figsize=(8,4))
-    ax.barh(3*[-0.5], width=finding_subtimings, left=xs2, alpha=0.8,
-             color=["cornflowerblue", "steelblue","deepskyblue"], 
-             label=["Graph building","GNN","Track building"]) 
-
-    ax.set_xlabel("walltime [s]")
-    ax.set_yticks([-0.5, 0.5])
-    ax.set_yticklabels(["Track finding", "Full chain"])
-
-    ax.set_title("Full chain timings per event")
-    ax.legend()
-
-    fig.tight_layout()
-    fig.savefig("timing.png")
-#except Exception as e:
-#    print(f"Cannot plot timing: {e}")
-
+import atlasify 
+atlasify.monkeypatch_axis_labels()
 
 class TEfficiency:
     def __init__(self, tefficency):
-        th1 = tefficency.GetTotalHistogram()
+        try:
+            th1 = tefficency.GetTotalHistogram()
+        except:
+            th1 = tefficency
 
         bins = [i for i in range(th1.GetNbinsX()) if th1.GetBinContent(i) > 0.0]
         bins = bins[1:]
@@ -61,10 +33,15 @@ class TEfficiency:
         self.x_hi = np.add(self.x_lo, self.x_width)
         self.x_err_lo = np.subtract(self.x, self.x_lo)
         self.x_err_hi = np.subtract(self.x_hi, self.x)
-
-        self.y = [tefficency.GetEfficiency(i) for i in bins]
-        self.y_err_lo = [tefficency.GetEfficiencyErrorLow(i) for i in bins]
-        self.y_err_hi = [tefficency.GetEfficiencyErrorUp(i) for i in bins]
+        
+        try:
+            self.y = [tefficency.GetEfficiency(i) for i in bins]
+            self.y_err_lo = [tefficency.GetEfficiencyErrorLow(i) for i in bins]
+            self.y_err_hi = [tefficency.GetEfficiencyErrorUp(i) for i in bins]
+        except:
+            self.y = [tefficency.GetBinContent(i) for i in bins]
+            self.y_err_lo = [tefficency.GetBinError(i) for i in bins]
+            self.y_err_hi = [tefficency.GetBinError(i) for i in bins]
 
     def errorbar(self, ax, **errorbar_kwargs):
         ax.errorbar(
@@ -82,37 +59,78 @@ class TEfficiency:
         return ax
 
 
+with open('configuration.yaml') as f:
+    config = yaml.load(f, Loader=yaml.FullLoader)
+
+if len(sys.argv) == 1:
+    files = [ f for f in os.listdir(".") if ("performance" in f) and ("tracks" in f) ]
+else:
+    files = sys.argv[1:]
+
+for f in files:
+    if "gnn_only" in f:
+        gnn_only_file = f
+    elif "fitted_tracks" in f:
+        perf_fitted_file = f
 
 try:
-    perf_kf = ROOT.TFile.Open("performance_kf_tracks.root")
+    perf_kf = ROOT.TFile.Open(perf_fitted_file)
 except:
     perf_kf = None
 
-perf_gnn_only = ROOT.TFile.Open("performance_non_fitted_tracks.root")
+perf_gnn_only = ROOT.TFile.Open(gnn_only_file)
 
-for metric in ["trackeff", "duplicationRate", "fakerate"]:
+label_dict = {
+    "eta": "$\eta$", 
+    "pT": "$p_T$",
+    "trackeff": "Technical Efficiency",
+    "duplicationRate": "Duplication Rate",
+    "fakerate": "Fake Rate",
+    "nMeasurements": "Number of Measurements",
+}
+
+for metric in ["trackeff", "duplicationRate", "fakerate", "nMeasurements"]:
     for var in ["eta", "pT"]:
         key = metric + "_vs_" + var
-        fig, ax = plt.subplots()
+        fig, ax = plt.subplots(figsize=(10,7))
         
         gnn_only_teff = TEfficiency(perf_gnn_only.Get(key))
-        gnn_only_teff.errorbar(ax, fmt='none', label="track finding only")
+        gnn_only_teff.errorbar(ax, fmt='o', color='blue', label="GNN track candidates")
 
         if perf_kf is not None:
             kf_teff = TEfficiency(perf_kf.Get(key))
-            kf_teff.errorbar(ax, fmt='none', color="tab:orange", label="after track fit")
+            kf_teff.errorbar(ax, fmt='None', color="red", label="Fitted tracks")
 
-        ax.set_ylabel(metric)
-        ax.set_xlabel(f"true {var}")
-        ax.set_title(f"ACTS performance writer: {key}")
+        ax.set_ylabel(label_dict[metric])
+        ax.set_xlabel(f"Truth {label_dict[var]}")
         
         if metric == "trackeff":
-            ax.set_ylim(0.59,1.01)
+            ax.set_ylim(0.9,1.0)
             ax.legend(loc='lower right')
-        else:
+        elif "rate" in metric.lower():
             ax.set_ylim(0.0,0.41)
             #ax.set_yscale('log')
             ax.legend(loc='upper right')
+
+        if "double_matching" in gnn_only_file:
+            matching = "double matching"
+        elif "atlas_matching" in gnn_only_file:
+            matching = "ATLAS standard matching"
+        else:
+            matching = "<unkknown matching>"
+
+        #f"{config['events']} HL-LHC, ITk Layout: 03-00-00 $t\bar{t}$, HS, #LT#mu#GT = 200, #sqrt{s}=14 TeV\n"
+        atlasify.atlasify("Simulation Internal",
+                 "HL-LHC, ACTS standalone GNN workflow, ITk Layout: 03-00-00\n"
+                 "$t\\bar{t}$, $\\langle\\mu\\rangle = 200$, $\sqrt{s}=14 TeV$\n"
+                 "Truth $p_{T}$ > 1 GeV, Truth hits $\geq$ 7, Truth $|\eta| < 4$, no electrons\n"
+                 "Hits on track $\geq$ 7",
+                 font_size=20,
+                 label_font_size=18,
+                 sub_font_size=14,
+                 subtext_distance=0.2)
+        atlasify.enlarge_yaxis(ax, 1.2)
+
 
         fig.savefig(f"{key}.png")
 

@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import os
+import copy
 import sys
 import argparse
 import pprint
 import click
+import yaml
 
 import acts.examples
 import acts
@@ -20,10 +22,9 @@ from common_pipeline import *
 @click.option('--data', help="Path to the ROOT file with dumped data", default=None)
 @click.option('--modulemap', help="Path to the module map file", default=None)
 @click.option('--gnn', help="Path to the GNN model file", default=None)
-@click.option('--truth', help="Use truth tracking instead of GNN", default=False, is_flag=True)
+@click.option('--finding-mode', default="full-gnn", type=click.Choice(['full-gnn', 'full-truth', 'gc-only']))
 @click.option('--debug','-v', default=False, is_flag=True)
 @click.option('--verbose','-vv', default=False, is_flag=True)
-@click.option('--select', default=False, is_flag=True)
 @click.option('--output','-o', type=str, default=".")
 @click.option('--no-phi-ovl-sps', is_flag=True, default=False)
 @click.option('--events', '-n', default=1, type=int)
@@ -31,19 +32,25 @@ from common_pipeline import *
 @click.option('--ckf/--no-ckf', default=False)
 @click.option('--profile/--no-profile', default=False)
 @click.option('--fit/--no-fit', default=False)
+@click.option('--timing-mode/--no-timing-mode', default=False)
+@click.option('--walkthrough/--no-walkthrough', default=False)
 @click.option('--itk-pixel-data', default=None)
 @click.option('--itk-strip-data', default=None)
 @click.option('--itk-material-map', default=None)
-def main(data, modulemap, gnn, truth, debug, verbose,
-         select, output, no_phi_ovl_sps, events, skip, ckf, profile,
-         fit, itk_pixel_data, itk_strip_data, itk_material_map):
+def main(data, modulemap, gnn, finding_mode, debug, verbose,
+         output, no_phi_ovl_sps, events, skip, ckf, profile,
+         fit, timing_mode, walkthrough, itk_pixel_data, itk_strip_data, itk_material_map):
     print("Configuration:")
-    pprint.pprint(locals())
+    config = copy.deepcopy(locals())
+    pprint.pprint(config)
     print(flush=True)
+    with open(Path(output) / "configuration.yaml", 'w') as f:
+        yaml.dump(config, f)
 
-    if not truth:
-        assert os.path.exists(data)
+    if finding_mode == "full-gnn":
         assert os.path.exists(gnn)
+
+    if finding_mode == "full-gnn" or finding_mode == "gc-only":
         assert os.path.exists(modulemap + ".triplets.root")
         assert os.path.exists(modulemap + ".doublets.root")
 
@@ -77,7 +84,7 @@ def main(data, modulemap, gnn, truth, debug, verbose,
 
     gnnConfig = {
         "level": logLevel,
-        "cut": 0.5,
+        "cut": 0.01 if walkthrough else 0.5,
         "undirected": False,
         "modelPath": gnn,
         "useEdgeFeatures": True,
@@ -102,7 +109,12 @@ def main(data, modulemap, gnn, truth, debug, verbose,
     edgeClassifiers = [
         EdgeClassifier(**gnnConfig),
     ]
-    trackBuilder = acts.examples.BoostTrackBuilding(logLevel)
+
+    builderCfg = {
+        "level": logLevel,
+        "doWalkthrough": walkthrough,
+    }
+    trackBuilder = acts.examples.BoostTrackBuilding(**builderCfg)
 
     e = acts.examples.NodeFeature
 
@@ -123,14 +135,14 @@ def main(data, modulemap, gnn, truth, debug, verbose,
         gnn_alg_config=gnn_alg_config,
         no_phi_ovl_sps=no_phi_ovl_sps,
         output=output,
-        select_tracks=select,
         logLevel=logLevel,
-        truth=truth,
+        finding_mode=finding_mode,
         events=events, 
         skip=skip, 
         use_ckf=ckf,
         profile=profile,
-        itkEnvironment=itkEnvironment
+        itkEnvironment=itkEnvironment,
+        timing_mode=timing_mode,
     )
 
 if "__main__" == __name__:

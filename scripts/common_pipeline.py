@@ -60,42 +60,6 @@ def plot_gpu_memory(inputFile, outputDir):
     fig.savefig(outputDir / "gpu_memory_profile.png")
 
 
-def maybe_select_and_write_performance(s, tracks_key, outputDir, logLevel, select_tracks, require_ref_surface):
-    if select_tracks:
-        selected_key = tracks_key + "_selected"
-        addTrackSelection(
-            s,
-            TrackSelectorConfig(nMeasurementsMin=7, requireReferenceSurface=require_ref_surface),
-            inputTracks=tracks_key,
-            outputTracks=selected_key,
-            logLevel=logLevel,
-        )
-    else:
-        selected_key = tracks_key
-
-    s.addAlgorithm(
-        acts.examples.TrackTruthMatcher(
-            level=max(logLevel, acts.logging.INFO),
-            inputTracks=selected_key,
-            inputParticles="particles_selected",
-            inputMeasurementParticlesMap="measurement_particles_map",
-            outputTrackParticleMatching=tracks_key + "_tpm",
-            outputParticleTrackMatching=tracks_key + "_ptm",
-            doubleMatching=True,
-        )
-    )
-
-    s.addWriter(
-        acts.examples.CKFPerformanceWriter(
-            level=max(logLevel, acts.logging.INFO),
-            inputParticles="particles_selected",
-            inputTrackParticleMatching=tracks_key + "_tpm",
-            inputParticleTrackMatching=tracks_key + "_ptm",
-            inputTracks=selected_key,
-            filePath=outputDir / f"performance_{tracks_key}.root",
-        )
-    )
-
 
 
 class ItkEnvironment:
@@ -110,12 +74,13 @@ class ItkEnvironment:
         self.gctx = acts.GeometryContext()
       
         if "FRANKENSTEIN_ITK" in os.environ:
+            print("WARNING: Use Frankenstein ITk geometry!!!")
             p = Path("/root/itk_gen1/itk_geometry")
             
             self.gmBuilder = ItkBuilderGeomodel(
                 str(p / "ITKPixels.db"), str(p / "ITKStrips.db"), True, self.gctx, self.logLevel
             )
-            print("Done with GeoModel part")
+            print("- Done with GeoModel part")
 
 
             self.gmBuilder.index_hierarchy.settings.allow_insertion = True
@@ -125,7 +90,7 @@ class ItkEnvironment:
                 str(p / "athena_transforms.csv"),
                 self.gctx, self.logLevel
             )
-            print("Done with JSON part")
+            print("- Done with JSON part")
 
             from itk_frankenstein_gen1 import ItkBuilderFrankenstein
             self.itkBuilder = ItkBuilderFrankenstein(
@@ -134,6 +99,7 @@ class ItkEnvironment:
                 gctx=self.gctx,
                 logLevel=self.logLevel
             )
+            print("- Done with Frankenstein merging", flush=True)
         else:
             if ".json" in file1:
                 ItkBuilder = ItkBuilderJson
@@ -179,13 +145,79 @@ class ItkEnvironment:
 
 def common_pipeline(
     input_file, gnn_alg_config, no_phi_ovl_sps,
-    output, select_tracks, logLevel, truth, events=1, skip=0,
+    output, logLevel, finding_mode, events=1, skip=0,
     profile=False, itkEnvironment=None, use_ckf=False,
+    timing_mode=False,
 ):
-    outputDir=Path(output)
+    outputDir = Path(output)
     outputDir.mkdir(exist_ok=True, parents=True)
     outputDirCsv = outputDir / "csv"
     outputDirCsv.mkdir(exist_ok=True)
+
+    writeIntermediateOutput = False
+    if timing_mode:
+        writeIntermediateOutput = False
+
+    useTightSeeds = False
+
+    filenamePrefix = f"n{events}"
+    filenamePrefix += finding_mode 
+    if use_ckf:
+        filenamePrefix += "_ckf"
+    else:
+        filenamePrefix += "_kf"
+
+    if "," in input_file:
+        input_file = input_file.split(',')
+    else:
+        input_file = [input_file]
+
+
+    def write_performance(s, tracks_key, require_ref_surface):    
+        def match_and_write(doubleMatching, tag, reweight):
+            s.addAlgorithm(
+                acts.examples.TrackTruthMatcher(
+                    level=max(logLevel, acts.logging.INFO),
+                    inputTracks=tracks_key,
+                    inputParticles="particles_selected",
+                    inputMeasurementParticlesMap="measurement_particles_map",
+                    outputTrackParticleMatching=tracks_key + "_" + tag + "_tpm",
+                    outputParticleTrackMatching=tracks_key + "_" + tag + "_ptm",
+                    doubleMatching=doubleMatching,
+                    reweightVolumes=reweight,
+                )
+            )
+
+            s.addWriter(
+                acts.examples.CKFPerformanceWriter(
+                    level=max(logLevel, acts.logging.INFO),
+                    inputParticles="particles_selected",
+                    inputTrackParticleMatching=tracks_key + "_" + tag + "_tpm",
+                    inputParticleTrackMatching=tracks_key + "_" + tag + "_ptm",
+                    inputTracks=tracks_key,
+                    filePath=outputDir / f"performance_{filenamePrefix}_{tag}_{tracks_key}.root",
+                )
+            )
+
+        pixelVolumeWeights = { v: 2.0 for v in [4,5,6,9,10,11,14,15,16]}
+        match_and_write(False, "atlas_matching", pixelVolumeWeights)
+        #match_and_write(False, "single_matching", {})
+        #match_and_write(True, "double_matching", {})
+       
+        if writeIntermediateOutput:
+            s.addWriter(
+                acts.examples.JsonTrackWriter(
+                    level=acts.logging.INFO,
+                    inputTracks=tracks_key,
+                    inputMeasurementParticlesMap="measurement_particles_map",
+                    outputDir=outputDir,
+                    fileStemp=tracks_key,
+                )
+            )
+ 
+    for f in input_file:
+        assert Path(f).exists()
+    print("input file list:",input_file,flush=True)
 
     # Make geo id mapping if we do the fitting
     geometryIdMap = None
@@ -204,7 +236,7 @@ def common_pipeline(
         acts.examples.RootAthenaDumpReader(
             level=max(logLevel, acts.logging.DEBUG),
             treename  = "GNN4ITk",
-            inputfile = input_file,
+            inputfiles = input_file,
             outputSpacePoints = "spacepoints",
             outputClusters = "clusters",
             outputMeasurements = "measurements",
@@ -224,77 +256,7 @@ def common_pipeline(
         ParticleSelectorConfig(
             pt=(1*u.GeV, None),
             rho=(0, 26*u.cm),
-            measurements=(3, None),
-            excludeAbsPdgs=[11,],
-            removeSecondaries=True,
-            removeNeutral=True,
-        ),
-        inputParticles="particles",
-        outputParticles="particles_selected_graph_metrics",
-        inputMeasurementParticlesMap="measurement_particles_map",
-    )
-
-    if not truth:
-        if True:
-            s.addAlgorithm(
-                acts.examples.TruthGraphBuilder(
-                    level=logLevel,
-                    inputParticles="particles_selected_graph_metrics",
-                    inputSpacePoints="spacepoints",
-                    inputMeasurementParticlesMap="measurement_particles_map",
-                    outputGraph="truth_graph",
-                    targetMinPT=1.0*u.GeV,
-                    targetMinSize=3,
-                    uniqueModules=True,
-                )
-            )
-        else:
-            s.addReader(
-                acts.examples.CsvExaTrkXGraphReader(
-                    level=logLevel,
-                    inputDir=outputDirCsv,
-                    inputStem="acorn-graph",
-                    outputGraph="truth_graph",
-                )
-            )
-
-        s.addAlgorithm(
-            acts.examples.TrackFindingAlgorithmExaTrkX(
-                level=logLevel,
-                inputSpacePoints="spacepoints",
-                inputClusters="clusters",
-                outputProtoTracks="gnn_prototracks",
-                inputTruthGraph="truth_graph",
-                geometryIdMap = geometryIdMap,
-                minMeasurementsPerTrack = 7,
-                **gnn_alg_config,
-            )
-        )
-    else:
-        s.addAlgorithm(
-            acts.examples.TruthTrackFinder(
-                level=logLevel,
-                inputParticles="particles",
-                inputMeasurementParticlesMap="measurement_particles_map",
-                outputProtoTracks="gnn_prototracks"
-            )
-        )
-
-    s.addAlgorithm(
-        acts.examples.PrototracksToTracks(
-            level=logLevel,
-            inputProtoTracks="gnn_prototracks",
-            inputMeasurements="measurements",
-            outputTracks="non_fitted_tracks",
-        )
-    )
-
-    addParticleSelection(
-        s,
-        ParticleSelectorConfig(
-            pt=(1*u.GeV, None),
-            rho=(0, 26*u.cm),
-            measurements=(7 if select_tracks else 3, None),
+            measurements=(7, None),
             excludeAbsPdgs=[11,],
             removeSecondaries=True,
             removeNeutral=True,
@@ -304,12 +266,96 @@ def common_pipeline(
         inputMeasurementParticlesMap="measurement_particles_map",
     )
     
-    maybe_select_and_write_performance(
+    if writeIntermediateOutput:
+        s.addWriter(
+            acts.examples.CsvSpacepointWriter(
+                level=logLevel,
+                inputSpacepoints="spacepoints",
+                outputDir=outputDirCsv,
+            )
+        )
+
+    if finding_mode == "full-gnn":
+        if not timing_mode:
+            s.addAlgorithm(
+                acts.examples.TruthGraphBuilder(
+                    level=logLevel,
+                    inputParticles="particles_selected",
+                    inputSpacePoints="spacepoints",
+                    inputMeasurementParticlesMap="measurement_particles_map",
+                    outputGraph="truth_graph",
+                    targetMinPT=1.0*u.GeV,
+                    targetMinSize=7,
+                    uniqueModules=True,
+                )
+            )
+
+        s.addAlgorithm(
+            acts.examples.TrackFindingAlgorithmExaTrkX(
+                level=logLevel,
+                inputSpacePoints="spacepoints",
+                inputClusters="clusters",
+                outputProtoTracks="gnn_prototracks",
+                inputTruthGraph="" if timing_mode else "truth_graph",
+                geometryIdMap = geometryIdMap,
+                minMeasurementsPerTrack = 7,
+                **gnn_alg_config,
+            )
+        )
+    elif finding_mode == "full-truth":
+        s.addAlgorithm(
+            acts.examples.TruthTrackFinder(
+                level=logLevel,
+                inputParticles="particles_selected",
+                inputMeasurementParticlesMap="measurement_particles_map",
+                outputProtoTracks="gnn_prototracks"
+            )
+        )
+    elif finding_mode == "gc-only":
+        del gnn_alg_config["edgeClassifiers"]
+        s.addAlgorithm(
+            acts.examples.GraphConstructionWithTruthClassifier(
+                level=logLevel,
+                inputSpacePoints="spacepoints",
+                inputMeasurementParticlesMap="measurement_particles_map",
+                inputClusters="clusters",
+                outputProtoTracks="gnn_prototracks",
+                geometryIdMap=geometryIdMap,
+                minMeasurementsPerTrack = 7,
+                **gnn_alg_config,
+            )
+        )
+
+    if False:
+        s.addWriter(
+            acts.examples.CsvProtoTrackWriter(
+                level=logLevel,
+                inputProtoTracks="gnn_prototracks",
+                inputSpacepoints="spacepoints",
+                outputDir=outputDirCsv,
+            )
+        )
+
+    s.addAlgorithm(
+        acts.examples.PrototracksToTracks(
+            level=logLevel,
+            inputProtoTracks="gnn_prototracks",
+            inputMeasurements="measurements",
+            outputTracks="gnn_only_tracks",
+        )
+    )
+
+    addTrackSelection(
         s,
-        tracks_key="non_fitted_tracks",
+        TrackSelectorConfig(nMeasurementsMin=7, requireReferenceSurface=False),
+        inputTracks="gnn_only_tracks",
+        outputTracks="gnn_only_tracks_selected",
         logLevel=logLevel,
-        outputDir=outputDir,
-        select_tracks=select_tracks,
+    )
+ 
+    write_performance(
+        s,
+        tracks_key="gnn_only_tracks_selected",
         require_ref_surface=False,
     )
 
@@ -321,30 +367,73 @@ def common_pipeline(
                 inputSpacePoints="spacepoints",
                 outputProtoTracks="prototracks_with_params",
                 outputParameters="estimatedparameters",
+                outputSeeds="gnn_seeds",
                 magneticField=itkEnvironment.field,
                 geometry=itkEnvironment.trackingGeometry,
-                buildTightSeeds=False,
+                buildTightSeeds=useTightSeeds,
+                stripVolumes={18,19,20},
+                minSpacepointDist=20*u.mm,
+                initialVarInflation=6*[100.0],
             )
         )
 
+        if writeIntermediateOutput:
+            s.addWriter(
+                acts.examples.RootSeedWriter(
+                    level=acts.logging.INFO,
+                    inputSeeds="gnn_seeds",
+                    filePath=outputDir/"seeds.root",
+                    writingMode="big",
+                )
+            )
+
+        tag = "tight_seeds" if useTightSeeds else "spread_seeds"  
+        s.addWriter(
+            acts.examples.SeedingPerformanceWriter(
+                level=logLevel,
+                inputSeeds="gnn_seeds",
+                filePath=outputDir/f"seeding_performance_{tag}.root",
+                inputParticles="particles_selected",
+                inputMeasurementParticlesMap="measurement_particles_map",
+            )
+        )
+
+        kalmanOptions = {
+            "multipleScattering": True,
+            "energyLoss": True,
+            "reverseFilteringMomThreshold": 0,
+            "freeToBoundCorrection": acts.examples.FreeToBoundCorrection(False),
+            "level": logLevel,
+            "chi2Cut": 100000000.0,
+        }
+
         if not use_ckf:
-            addKalmanTracks(
-                s,
-                itkEnvironment.trackingGeometry,
-                itkEnvironment.field,
-                inputProtoTracks="prototracks_with_params",
+            s.addAlgorithm(
+                acts.examples.TrackFittingAlgorithm(
+                    level=logLevel,
+                    inputMeasurements="measurements",
+                    inputProtoTracks="prototracks_with_params",
+                    inputInitialTrackParameters="estimatedparameters",
+                    inputClusters="",
+                    outputTracks="fitted_tracks",
+                    pickTrack=-1,
+                    fit = acts.examples.makeKalmanFitterFunction(
+                        itkEnvironment.trackingGeometry, itkEnvironment.field, **kalmanOptions
+                    ),
+                    calibrator=acts.examples.makePassThroughCalibrator(),
+                )
             )
         else:
             s.addAlgorithm(
                 acts.examples.TrackFindingFromPrototrackAlgorithm(
-                    level=acts.logging.INFO,
+                    level=logLevel,
                     inputProtoTracks="prototracks_with_params",
                     inputMeasurements="measurements",
                     inputInitialTrackParameters="estimatedparameters",
-                    outputTracks="kf_tracks",
+                    outputTracks="fitted_tracks", #"raw_tracks",
                     measurementSelectorCfg=acts.MeasurementSelector.Config(
                         #[(acts.GeometryIdentifier(), ([], [chi2Cut], [1], []))]
-                        [(acts.GeometryIdentifier(), acts.MeasurementSelectorCuts([], [100.0], [1], []))]
+                        [(acts.GeometryIdentifier(), acts.MeasurementSelectorCuts([], [kalmanOptions["chi2Cut"],], [1], []))]
                     ),
                     trackingGeometry=itkEnvironment.trackingGeometry,
                     magneticField=itkEnvironment.field,
@@ -353,35 +442,30 @@ def common_pipeline(
                         itkEnvironment.field,
                         acts.logging.INFO,
                     ),
+                    onlyPrototrackMeasurements=False,
                 )
             )
+            
+            if False:
+                s.addAlgorithm(
+                    acts.examples.RefittingAlgorithm(
+                        level=logLevel,
+                        inputTracks="raw_tracks",
+                        outputTracks="fitted_tracks",
+                        fit = acts.examples.makeKalmanFitterFunction(
+                            itkEnvironment.trackingGeometry, itkEnvironment.field, **kalmanOptions
+                        ),
+                    )
+                )
 
-        maybe_select_and_write_performance(
+
+        # Do not select here, so we see tracks that are shorter after KF in the plots
+        write_performance(
             s,
-            tracks_key="kf_tracks",
-            logLevel=logLevel,
-            outputDir=outputDir,
-            select_tracks=select_tracks,
+            tracks_key="fitted_tracks",
             require_ref_surface=True,
         )
 
-    s.addWriter(
-        acts.examples.CsvSpacepointWriter(
-            level=logLevel,
-            inputSpacepoints="spacepoints",
-            outputDir=outputDirCsv,
-        )
-    )
-
-    if not truth:
-        s.addWriter(
-            acts.examples.CsvExaTrkXGraphWriter(
-                level=logLevel,
-                inputGraph="truth_graph",
-                outputStem="truth-graph",
-                outputDir=outputDirCsv,
-            )
-        )
 
     if profile:
         profile_file = outputDir / "gpu_memory_profile.csv"

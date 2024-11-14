@@ -7,8 +7,8 @@ source setup_acorn.sh
 
 infer ctd23/config/data_reader.yaml
 
-infer ctd23/config/module_map.yaml
-evaluate ctd23/config/module_map.yaml
+#infer ctd23/config/module_map.yaml
+#evaluate ctd23/config/module_map.yaml
 
-infer ctd23/config/gnn_infer.yaml -c ctd23/data/GNN_IN2_epochs169.ckpt
-evaluate ctd23/config/gnn_eval.yaml -c ctd23/data/GNN_IN2_epochs169.ckpt
+#infer ctd23/config/gnn_infer.yaml -c ctd23/data/GNN_IN2_epochs169.ckpt
+#evaluate ctd23/config/gnn_eval.yaml -c ctd23/data/GNN_IN2_epochs169.ckpt

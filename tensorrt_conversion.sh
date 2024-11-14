@@ -4,7 +4,7 @@ MIN_NODES=1
 MIN_EDGES=1
 
 MAX_NODES=1000000
-MAX_EDGES=2000000
+MAX_EDGES=3000000
 
 NODES=400000
 EDGES=800000
@@ -14,8 +14,8 @@ python3 -c "import numpy as np; np.random.uniform(0,1,($NODES,12)).tofile('nodes
 python3 -c "import numpy as np; np.random.uniform(0,1,($EDGES,6)).tofile('edge_attr.npz')"
 python3 -c "import numpy as np; np.random.randint(0,$NODES,(2,$EDGES)).tofile('edge_index.npz')"
 
+#  --best \
 trtexec \
-  --best \
   --directIO \
   --onnx=$1.onnx \
   --saveEngine=$1_best.engine \
