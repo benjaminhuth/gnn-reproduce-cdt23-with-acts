@@ -37,9 +37,14 @@ from common_pipeline import *
 @click.option('--itk-pixel-data', default=None)
 @click.option('--itk-strip-data', default=None)
 @click.option('--itk-material-map', default=None)
+@click.option('--gpu-blockdim', default=512)
+@click.option('--jobs', '-j', default=1)
+@click.option('--module-map-dynamic-alloc/--no-module-map-dynamic-alloc', default=False)
+@click.option('--tensorrt-exec-contexts', default=1)
 def main(data, modulemap, gnn, finding_mode, debug, verbose,
          output, no_phi_ovl_sps, events, skip, ckf, profile,
-         fit, timing_mode, walkthrough, itk_pixel_data, itk_strip_data, itk_material_map):
+         fit, timing_mode, walkthrough, itk_pixel_data, itk_strip_data, itk_material_map,
+         gpu_blockdim, jobs, module_map_dynamic_alloc, tensorrt_exec_contexts):
     print("Configuration:")
     config = copy.deepcopy(locals())
     pprint.pprint(config)
@@ -76,11 +81,12 @@ def main(data, modulemap, gnn, finding_mode, debug, verbose,
         "rScale": 1000.0,
         "phiScale": 3.141592654,
         "zScale": 1000.0,
-        "useGpu": True,
         "gpuDevice": 0,
-        "gpuBlocks": 512,
+        "gpuBlocks": gpu_blockdim,
+        "maxEdgesAllocate": 0 if module_map_dynamic_alloc else 3000
     }
-    graphConstructor = acts.examples.ModuleMapCpp(**moduleMapConfig)
+    print(moduleMapConfig, flush=True)
+    graphConstructor = acts.examples.ModuleMapCuda(**moduleMapConfig)
 
     gnnConfig = {
         "level": logLevel,
@@ -104,17 +110,21 @@ def main(data, modulemap, gnn, finding_mode, debug, verbose,
         gnnConfig["doSigmoid"] = not ("sigmoid" in gnn)
         del gnnConfig["undirected"]
         del gnnConfig["useEdgeFeatures"]
+        gnnConfig["numExecutionContexts"] = tensorrt_exec_contexts
     assert EdgeClassifier is not None
 
     edgeClassifiers = [
         EdgeClassifier(**gnnConfig),
     ]
 
-    builderCfg = {
-        "level": logLevel,
-        "doWalkthrough": walkthrough,
-    }
-    trackBuilder = acts.examples.BoostTrackBuilding(**builderCfg)
+    if False:
+        builderCfg = {
+            "level": logLevel,
+            "doWalkthrough": walkthrough,
+        }
+        trackBuilder = acts.examples.BoostTrackBuilding(**builderCfg)
+    else:
+        trackBuilder = acts.examples.CudaTrackBuilding(level=logLevel)
 
     e = acts.examples.NodeFeature
 
@@ -137,12 +147,13 @@ def main(data, modulemap, gnn, finding_mode, debug, verbose,
         output=output,
         logLevel=logLevel,
         finding_mode=finding_mode,
-        events=events, 
-        skip=skip, 
+        events=events,
+        skip=skip,
         use_ckf=ckf,
         profile=profile,
         itkEnvironment=itkEnvironment,
         timing_mode=timing_mode,
+        jobs=jobs,
     )
 
 if "__main__" == __name__:

@@ -1,8 +1,7 @@
 #!/bin/bash
 
 set -e
-
-#export LD_PRELOAD=/lib64/libasan.so.6
+set -o pipefail
 
 source setup_acts.sh
 
@@ -16,15 +15,17 @@ DATA=$(python3 -c "print(','.join([ f'$DATA_PREFIX.{n}.$DATA_POSTFIX' for n in [
 #DATA=rel24/data/Dump_GNN4Itk.root
 
 #GNN=rel24/data/gnn.pt
+#GNN=rel24/data/gnn_santosh.pt
 #GNN=rel24/data/gnn.onnx
-GNN=rel24/data/gnn.engine
+#GNN=rel24/data/gnn.engine
+GNN=rel24/data/gnn_santosh.engine
 
 #OUTPUT_DIR=tmp/rel24/acts
 OUTPUT_DIR=tmp/rel24/acts_test
 mkdir -p $OUTPUT_DIR
 rm -vfr $OUTPUT_DIR/*
 
-export FRANKENSTEIN_ITK=1
+#export FRANKENSTEIN_ITK=1
 
 ITK_FILE1=athena_surfaces.json
 ITK_FILE2=athena_transforms.csv
@@ -41,8 +42,16 @@ $PREFIX python3 scripts/module_map_pipeline.py "$@" \
     --itk-strip-data $ITK_ROOT/itk_geometry/$ITK_FILE2 \
     --no-phi-ovl-sps | tee $OUTPUT_DIR/logfile.log
 
-unset LD_PRELOAD
+RET=$?
+
+# exit if RET is not 0
+if [ $RET -ne 0 ]; then
+    exit $RET
+fi
+
 DIR=$PWD
 cd $OUTPUT_DIR
+
+column -t -s, timing.csv
 python3 $DIR/scripts/plot_efficiency.py *atlas*.root
-python3 $DIR/scripts/plot_timing.py
+#python3 $DIR/scripts/plot_timing.py

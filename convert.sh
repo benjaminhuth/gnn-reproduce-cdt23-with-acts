@@ -30,7 +30,8 @@ function convert {
 
 
 #convert InteractionGNN2 edge_classifier "ctd23/data/GNN_IN2_epochs169.ckpt" gnn.test
-convert InteractionGNN2 edge_classifier "rel24/data/best_latent128_LN--val_loss=0.000409-epoch=77.ckpt" gnn
+#convert InteractionGNN2 edge_classifier "rel24/data/best_latent128_LN--val_loss=0.000409-epoch=77.ckpt" gnn
+convert InteractionGNN2 edge_classifier "rel24/data/best--val_loss=0.000396-epoch=488-santosh-small.ckpt" gnn_santosh
 
 #convert MetricLearning graph_construction "ctd23/data/best-11292882-f1_0.010190.ckpt" metric_learning.pt
 #convert Filter edge_classifier "./ctd23/data/best-11984324-auc=0.967753.ckpt" filter.pt

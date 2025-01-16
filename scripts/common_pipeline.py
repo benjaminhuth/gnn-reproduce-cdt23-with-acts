@@ -146,7 +146,7 @@ class ItkEnvironment:
 def common_pipeline(
     input_file, gnn_alg_config, no_phi_ovl_sps,
     output, logLevel, finding_mode, events=1, skip=0,
-    profile=False, itkEnvironment=None, use_ckf=False,
+    jobs=1, profile=False, itkEnvironment=None, use_ckf=False,
     timing_mode=False,
 ):
     outputDir = Path(output)
@@ -155,9 +155,6 @@ def common_pipeline(
     outputDirCsv.mkdir(exist_ok=True)
 
     writeIntermediateOutput = False
-    if timing_mode:
-        writeIntermediateOutput = False
-
     useTightSeeds = False
 
     filenamePrefix = f"n{events}"
@@ -171,6 +168,11 @@ def common_pipeline(
         input_file = input_file.split(',')
     else:
         input_file = [input_file]
+
+    if timing_mode:
+        print("WARNING: Timing mode, not truth metrics are written")
+        writeIntermediateOutput = False
+        assert finding_mode == "full-gnn"
 
 
     def write_performance(s, tracks_key, require_ref_surface):    
@@ -189,7 +191,7 @@ def common_pipeline(
             )
 
             s.addWriter(
-                acts.examples.CKFPerformanceWriter(
+                acts.examples.TrackFinderPerformanceWriter(
                     level=max(logLevel, acts.logging.INFO),
                     inputParticles="particles_selected",
                     inputTrackParticleMatching=tracks_key + "_" + tag + "_tpm",
@@ -227,44 +229,56 @@ def common_pipeline(
     s = acts.examples.Sequencer(
         events=events,
         skip=skip,
-        numThreads=1,
+        numThreads=jobs,
         outputDir = outputDir,
     )
 
     # Read Athena input space points and clusters from root file
-    s.addReader(
-        acts.examples.RootAthenaDumpReader(
-            level=max(logLevel, acts.logging.DEBUG),
-            treename  = "GNN4ITk",
-            inputfiles = input_file,
-            outputSpacePoints = "spacepoints",
-            outputClusters = "clusters",
-            outputMeasurements = "measurements",
-            outputMeasurementParticlesMap = "measurement_particles_map",
-            outputParticles = "particles",
-            onlyPassedParticles = False,
-            skipOverlapSPsPhi = no_phi_ovl_sps,
-            skipOverlapSPsEta = False,
-            geometryIdMap = geometryIdMap,
-            trackingGeometry = None if itkEnvironment is None else itkEnvironment.trackingGeometry,
-            absBoundaryTolerance = 2 * u.mm,
-        )
+    reader = acts.examples.RootAthenaDumpReader(
+        level=max(logLevel, acts.logging.DEBUG),
+        treename  = "GNN4ITk",
+        inputfiles = input_file,
+        outputSpacePoints = "spacepoints",
+        outputClusters = "clusters",
+        outputMeasurements = "measurements",
+        outputMeasurementParticlesMap = "measurement_particles_map",
+        outputParticleMeasurementsMap = "part_meas_map",
+        outputParticles = "particles",
+        onlyPassedParticles = False,
+        skipOverlapSPsPhi = no_phi_ovl_sps,
+        skipOverlapSPsEta = False,
+        geometryIdMap = geometryIdMap,
+        trackingGeometry = None if itkEnvironment is None else itkEnvironment.trackingGeometry,
+        absBoundaryTolerance = 0.01 * u.mm,
+        noTruth = timing_mode, # in timing mode, only read spacepoints
     )
 
-    addParticleSelection(
-        s,
-        ParticleSelectorConfig(
-            pt=(1*u.GeV, None),
-            rho=(0, 26*u.cm),
-            measurements=(7, None),
-            excludeAbsPdgs=[11,],
-            removeSecondaries=True,
-            removeNeutral=True,
-        ),
-        inputParticles="particles",
-        outputParticles="particles_selected",
-        inputMeasurementParticlesMap="measurement_particles_map",
-    )
+    if timing_mode:
+        s.addReader(
+            acts.examples.BufferedReader(
+                level=logLevel,
+                downstreamReader=reader,
+                bufferSize=min(50, events),
+            )
+        )
+    else:
+        s.addReader(reader)
+
+    if not timing_mode:
+        s.addAlgorithm(
+            acts.examples.ParticleSelector(
+                level=logLevel,
+                ptMin=1*u.GeV,
+                rhoMax=26*u.cm,
+                measurementsMin=7,
+                removeSecondaries=True,
+                removeNeutral=True,
+                excludeAbsPdgs=[11,],
+                inputParticles="particles",
+                outputParticles="particles_selected",
+                inputParticleMeasurementsMap="part_meas_map",
+            )
+        )
     
     if writeIntermediateOutput:
         s.addWriter(
@@ -276,7 +290,7 @@ def common_pipeline(
         )
 
     if finding_mode == "full-gnn":
-        if not timing_mode:
+        if False:  # is broken currently
             s.addAlgorithm(
                 acts.examples.TruthGraphBuilder(
                     level=logLevel,
@@ -296,7 +310,7 @@ def common_pipeline(
                 inputSpacePoints="spacepoints",
                 inputClusters="clusters",
                 outputProtoTracks="gnn_prototracks",
-                inputTruthGraph="" if timing_mode else "truth_graph",
+                inputTruthGraph="",
                 geometryIdMap = geometryIdMap,
                 minMeasurementsPerTrack = 7,
                 **gnn_alg_config,
@@ -307,7 +321,7 @@ def common_pipeline(
             acts.examples.TruthTrackFinder(
                 level=logLevel,
                 inputParticles="particles_selected",
-                inputMeasurementParticlesMap="measurement_particles_map",
+                inputParticleMeasurementsMap="part_meas_map",
                 outputProtoTracks="gnn_prototracks"
             )
         )
@@ -323,16 +337,6 @@ def common_pipeline(
                 geometryIdMap=geometryIdMap,
                 minMeasurementsPerTrack = 7,
                 **gnn_alg_config,
-            )
-        )
-
-    if False:
-        s.addWriter(
-            acts.examples.CsvProtoTrackWriter(
-                level=logLevel,
-                inputProtoTracks="gnn_prototracks",
-                inputSpacepoints="spacepoints",
-                outputDir=outputDirCsv,
             )
         )
 
@@ -352,12 +356,13 @@ def common_pipeline(
         outputTracks="gnn_only_tracks_selected",
         logLevel=logLevel,
     )
- 
-    write_performance(
-        s,
-        tracks_key="gnn_only_tracks_selected",
-        require_ref_surface=False,
-    )
+
+    if not timing_mode:
+        write_performance(
+            s,
+            tracks_key="gnn_only_tracks_selected",
+            require_ref_surface=False,
+        )
 
     if itkEnvironment is not None:
         s.addAlgorithm(
