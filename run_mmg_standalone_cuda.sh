@@ -36,4 +36,3 @@ $PREFIX $MMG_ROOT/bin/GraphBuilder.cu.exe \
     --strip-hit-pair=0 \
     --extra-features=0 \
     --events=1
-

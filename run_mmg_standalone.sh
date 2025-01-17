@@ -28,4 +28,3 @@ $PREFIX $HOME/software/ModuleMapGraph/bin/GraphBuilder.exe \
     --cut2-eta=0 \
     --strip-hit-pair=0 \
     --extra-features=0
-

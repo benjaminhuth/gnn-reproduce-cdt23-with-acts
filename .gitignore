@@ -1,3 +1,6 @@
+stash
+perf.data*
+*.svg
 *.csv
 *.txt
 events-hits.txt

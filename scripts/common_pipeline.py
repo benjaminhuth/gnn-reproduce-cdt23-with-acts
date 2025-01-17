@@ -21,6 +21,7 @@ from acts.examples.simulation import *
 
 from acts import UnitConstants as u
 
+
 def plot_gpu_memory(inputFile, outputDir):
     assert inputFile.exists()
 
@@ -33,7 +34,7 @@ def plot_gpu_memory(inputFile, outputDir):
     )
 
     # Remove last line that can be corrupted
-    data.drop(data.tail(1).index,inplace=True)
+    data.drop(data.tail(1).index, inplace=True)
 
     data["timestamp"] = data["timestamp"].apply(
         lambda tp: datetime.strptime(tp, "%Y/%m/%d %H:%M:%S.%f")
@@ -60,8 +61,6 @@ def plot_gpu_memory(inputFile, outputDir):
     fig.savefig(outputDir / "gpu_memory_profile.png")
 
 
-
-
 class ItkEnvironment:
     def __init__(self, file1, file2, materialMap, logLevel=acts.logging.INFO):
         from itk_from_geomodel_gen1 import ItkBuilderGeomodel
@@ -72,32 +71,37 @@ class ItkEnvironment:
         assert Path(file1).exists()
         assert Path(file2).exists()
         self.gctx = acts.GeometryContext()
-      
+
         if "FRANKENSTEIN_ITK" in os.environ:
             print("WARNING: Use Frankenstein ITk geometry!!!")
             p = Path("/root/itk_gen1/itk_geometry")
-            
+
             self.gmBuilder = ItkBuilderGeomodel(
-                str(p / "ITKPixels.db"), str(p / "ITKStrips.db"), True, self.gctx, self.logLevel
+                str(p / "ITKPixels.db"),
+                str(p / "ITKStrips.db"),
+                True,
+                self.gctx,
+                self.logLevel,
             )
             print("- Done with GeoModel part")
-
 
             self.gmBuilder.index_hierarchy.settings.allow_insertion = True
 
             self.jsonBuilder = ItkBuilderJson(
                 str(p / "athena_surfaces.json"),
                 str(p / "athena_transforms.csv"),
-                self.gctx, self.logLevel
+                self.gctx,
+                self.logLevel,
             )
             print("- Done with JSON part")
 
             from itk_frankenstein_gen1 import ItkBuilderFrankenstein
+
             self.itkBuilder = ItkBuilderFrankenstein(
                 index_hierarchy=self.jsonBuilder.index_hierarchy,
                 index_hierarchy_endcaps=self.gmBuilder.index_hierarchy,
                 gctx=self.gctx,
-                logLevel=self.logLevel
+                logLevel=self.logLevel,
             )
             print("- Done with Frankenstein merging", flush=True)
         else:
@@ -106,7 +110,7 @@ class ItkEnvironment:
                 kwargs = {}
             else:
                 ItkBuilder = ItkBuilderGeomodel
-                kwargs = { "applyModuleSplit": True }
+                kwargs = {"applyModuleSplit": True}
 
             self.itkBuilder = ItkBuilder(
                 file1, file2, gctx=self.gctx, logLevel=self.logLevel, **kwargs
@@ -118,9 +122,7 @@ class ItkEnvironment:
         )
 
         self.trackingGeometry = self.itkBuilder.finalize(mdec)
-        self.field = acts.ConstantBField(
-            acts.Vector3(0, 0, 2 * acts.UnitConstants.T)
-        )
+        self.field = acts.ConstantBField(acts.Vector3(0, 0, 2 * acts.UnitConstants.T))
 
     def get_geoid_map(self, events, skip, input_file):
         s = acts.examples.Sequencer(
@@ -132,11 +134,11 @@ class ItkEnvironment:
         geometryIdMap = acts.examples.GeometryIdMapActsAthena()
         s.addReader(
             acts.examples.RootAthenaDumpGeoIdCollector(
-                level = self.logLevel,
-                treename  = "GNN4ITk",
-                inputfile = input_file,
-                geometryIdMap = geometryIdMap,
-                trackingGeometry = self.trackingGeometry,
+                level=self.logLevel,
+                treename="GNN4ITk",
+                inputfile=input_file,
+                geometryIdMap=geometryIdMap,
+                trackingGeometry=self.trackingGeometry,
             )
         )
         s.run()
@@ -144,9 +146,18 @@ class ItkEnvironment:
 
 
 def common_pipeline(
-    input_file, gnn_alg_config, no_phi_ovl_sps,
-    output, logLevel, finding_mode, events=1, skip=0,
-    jobs=1, profile=False, itkEnvironment=None, use_ckf=False,
+    input_file,
+    gnn_alg_config,
+    no_phi_ovl_sps,
+    output,
+    logLevel,
+    finding_mode,
+    events=1,
+    skip=0,
+    jobs=1,
+    profile=False,
+    itkEnvironment=None,
+    use_ckf=False,
     timing_mode=False,
 ):
     outputDir = Path(output)
@@ -158,14 +169,14 @@ def common_pipeline(
     useTightSeeds = False
 
     filenamePrefix = f"n{events}"
-    filenamePrefix += finding_mode 
+    filenamePrefix += finding_mode
     if use_ckf:
         filenamePrefix += "_ckf"
     else:
         filenamePrefix += "_kf"
 
     if "," in input_file:
-        input_file = input_file.split(',')
+        input_file = input_file.split(",")
     else:
         input_file = [input_file]
 
@@ -174,8 +185,7 @@ def common_pipeline(
         writeIntermediateOutput = False
         assert finding_mode == "full-gnn"
 
-
-    def write_performance(s, tracks_key, require_ref_surface):    
+    def write_performance(s, tracks_key, require_ref_surface):
         def match_and_write(doubleMatching, tag, reweight):
             tpm = tracks_key + "_" + tag + "_tpm"
             ptm = tracks_key + "_" + tag + "_ptm"
@@ -199,7 +209,8 @@ def common_pipeline(
                     inputTrackParticleMatching=tpm,
                     inputParticleTrackMatching=ptm,
                     inputTracks=tracks_key,
-                    filePath=outputDir / f"performance_{filenamePrefix}_{tag}_{tracks_key}.root",
+                    filePath=outputDir
+                    / f"performance_{filenamePrefix}_{tag}_{tracks_key}.root",
                 )
             )
 
@@ -211,50 +222,52 @@ def common_pipeline(
                         inputParticles="particles_selected",
                         inputTrackParticleMatching=tpm,
                         inputTracks=tracks_key,
-                        filePath=outputDir / f"fit_performance_{filenamePrefix}_{tag}_{tracks_key}.root",
+                        filePath=outputDir
+                        / f"fit_performance_{filenamePrefix}_{tag}_{tracks_key}.root",
                     )
                 )
 
-        pixelVolumeWeights = { v: 2.0 for v in [4,5,6,9,10,11,14,15,16]}
+        pixelVolumeWeights = {v: 2.0 for v in [4, 5, 6, 9, 10, 11, 14, 15, 16]}
         match_and_write(False, "atlas_matching", pixelVolumeWeights)
-        #match_and_write(False, "single_matching", {})
-        #match_and_write(True, "double_matching", {})
+        # match_and_write(False, "single_matching", {})
+        # match_and_write(True, "double_matching", {})
 
- 
     for f in input_file:
         assert Path(f).exists()
-    print("input file list:",input_file,flush=True)
+    print("input file list:", input_file, flush=True)
 
     # Make geo id mapping if we do the fitting
     geometryIdMap = None
     if itkEnvironment is not None:
         geometryIdMap = itkEnvironment.get_geoid_map(events, skip, input_file)
-    
+
     s = acts.examples.Sequencer(
         events=events,
         skip=skip,
         numThreads=jobs,
-        outputDir = outputDir,
+        outputDir=outputDir,
     )
 
     # Read Athena input space points and clusters from root file
     reader = acts.examples.RootAthenaDumpReader(
         level=max(logLevel, acts.logging.DEBUG),
-        treename  = "GNN4ITk",
-        inputfiles = input_file,
-        outputSpacePoints = "spacepoints",
-        outputClusters = "clusters",
-        outputMeasurements = "measurements",
-        outputMeasurementParticlesMap = "measurement_particles_map",
-        outputParticleMeasurementsMap = "part_meas_map",
-        outputParticles = "particles",
-        onlyPassedParticles = False,
-        skipOverlapSPsPhi = no_phi_ovl_sps,
-        skipOverlapSPsEta = False,
-        geometryIdMap = geometryIdMap,
-        trackingGeometry = None if itkEnvironment is None else itkEnvironment.trackingGeometry,
-        absBoundaryTolerance = 0.01 * u.mm,
-        noTruth = timing_mode, # in timing mode, only read spacepoints
+        treename="GNN4ITk",
+        inputfiles=input_file,
+        outputSpacePoints="spacepoints",
+        outputClusters="clusters",
+        outputMeasurements="measurements",
+        outputMeasurementParticlesMap="measurement_particles_map",
+        outputParticleMeasurementsMap="part_meas_map",
+        outputParticles="particles",
+        onlyPassedParticles=False,
+        skipOverlapSPsPhi=no_phi_ovl_sps,
+        skipOverlapSPsEta=False,
+        geometryIdMap=geometryIdMap,
+        trackingGeometry=None
+        if itkEnvironment is None
+        else itkEnvironment.trackingGeometry,
+        absBoundaryTolerance=0.01 * u.mm,
+        noTruth=timing_mode,  # in timing mode, only read spacepoints
     )
 
     if timing_mode:
@@ -272,18 +285,20 @@ def common_pipeline(
         s.addAlgorithm(
             acts.examples.ParticleSelector(
                 level=logLevel,
-                ptMin=1*u.GeV,
-                rhoMax=26*u.cm,
+                ptMin=1 * u.GeV,
+                rhoMax=26 * u.cm,
                 measurementsMin=7,
                 removeSecondaries=True,
                 removeNeutral=True,
-                excludeAbsPdgs=[11,],
+                excludeAbsPdgs=[
+                    11,
+                ],
                 inputParticles="particles",
                 outputParticles="particles_selected",
                 inputParticleMeasurementsMap="part_meas_map",
             )
         )
-    
+
     if writeIntermediateOutput:
         s.addWriter(
             acts.examples.CsvSpacepointWriter(
@@ -302,7 +317,7 @@ def common_pipeline(
                     inputSpacePoints="spacepoints",
                     inputMeasurementParticlesMap="measurement_particles_map",
                     outputGraph="truth_graph",
-                    targetMinPT=1.0*u.GeV,
+                    targetMinPT=1.0 * u.GeV,
                     targetMinSize=7,
                     uniqueModules=True,
                 )
@@ -315,8 +330,8 @@ def common_pipeline(
                 inputClusters="clusters",
                 outputProtoTracks="gnn_prototracks",
                 inputTruthGraph="",
-                geometryIdMap = geometryIdMap,
-                minMeasurementsPerTrack = 7,
+                geometryIdMap=geometryIdMap,
+                minMeasurementsPerTrack=7,
                 **gnn_alg_config,
             )
         )
@@ -326,7 +341,7 @@ def common_pipeline(
                 level=logLevel,
                 inputParticles="particles_selected",
                 inputParticleMeasurementsMap="part_meas_map",
-                outputProtoTracks="gnn_prototracks"
+                outputProtoTracks="gnn_prototracks",
             )
         )
     elif finding_mode == "gc-only":
@@ -339,7 +354,7 @@ def common_pipeline(
                 inputClusters="clusters",
                 outputProtoTracks="gnn_prototracks",
                 geometryIdMap=geometryIdMap,
-                minMeasurementsPerTrack = 7,
+                minMeasurementsPerTrack=7,
                 **gnn_alg_config,
             )
         )
@@ -380,9 +395,9 @@ def common_pipeline(
                 magneticField=itkEnvironment.field,
                 geometry=itkEnvironment.trackingGeometry,
                 buildTightSeeds=useTightSeeds,
-                stripVolumes={18,19,20},
-                minSpacepointDist=20*u.mm,
-                initialVarInflation=6*[100.0],
+                stripVolumes={18, 19, 20},
+                minSpacepointDist=20 * u.mm,
+                initialVarInflation=6 * [100.0],
             )
         )
 
@@ -391,23 +406,23 @@ def common_pipeline(
                 acts.examples.RootSeedWriter(
                     level=acts.logging.INFO,
                     inputSeeds="gnn_seeds",
-                    filePath=outputDir/"seeds.root",
+                    filePath=outputDir / "seeds.root",
                     writingMode="big",
                 )
             )
 
-        tag = "tight_seeds" if useTightSeeds else "spread_seeds"  
+        tag = "tight_seeds" if useTightSeeds else "spread_seeds"
         s.addWriter(
             acts.examples.SeedingPerformanceWriter(
                 level=logLevel,
                 inputSeeds="gnn_seeds",
-                filePath=outputDir/f"seeding_performance_{tag}.root",
+                filePath=outputDir / f"seeding_performance_{tag}.root",
                 inputParticles="particles_selected",
                 inputMeasurementParticlesMap="measurement_particles_map",
             )
         )
 
-        for chi2Cut in [20.0, 100.0, float('inf')]:
+        for chi2Cut in [20.0, 100.0, float("inf")]:
             kalmanOptions = {
                 "multipleScattering": True,
                 "energyLoss": True,
@@ -417,7 +432,7 @@ def common_pipeline(
                 "chi2Cut": chi2Cut,
             }
 
-            tracks_key = "fitted_tracks_" + str(chi2Cut).replace('.0', '') + "_chi2"
+            tracks_key = "fitted_tracks_" + str(chi2Cut).replace(".0", "") + "_chi2"
 
             if not use_ckf:
                 s.addAlgorithm(
@@ -429,8 +444,10 @@ def common_pipeline(
                         inputClusters="",
                         outputTracks=tracks_key,
                         pickTrack=-1,
-                        fit = acts.examples.makeKalmanFitterFunction(
-                            itkEnvironment.trackingGeometry, itkEnvironment.field, **kalmanOptions
+                        fit=acts.examples.makeKalmanFitterFunction(
+                            itkEnvironment.trackingGeometry,
+                            itkEnvironment.field,
+                            **kalmanOptions,
                         ),
                         calibrator=acts.examples.makePassThroughCalibrator(),
                     )
@@ -444,7 +461,19 @@ def common_pipeline(
                         inputInitialTrackParameters="estimatedparameters",
                         outputTracks=tracks_key,
                         measurementSelectorCfg=acts.MeasurementSelector.Config(
-                            [(acts.GeometryIdentifier(), acts.MeasurementSelectorCuts([], [kalmanOptions["chi2Cut"],], [1], []))]
+                            [
+                                (
+                                    acts.GeometryIdentifier(),
+                                    acts.MeasurementSelectorCuts(
+                                        [],
+                                        [
+                                            kalmanOptions["chi2Cut"],
+                                        ],
+                                        [1],
+                                        [],
+                                    ),
+                                )
+                            ]
                         ),
                         trackingGeometry=itkEnvironment.trackingGeometry,
                         magneticField=itkEnvironment.field,
@@ -463,8 +492,10 @@ def common_pipeline(
                             level=logLevel,
                             inputTracks=tracks_key,
                             outputTracks="fitted_tracks",
-                            fit = acts.examples.makeKalmanFitterFunction(
-                                itkEnvironment.trackingGeometry, itkEnvironment.field, **kalmanOptions
+                            fit=acts.examples.makeKalmanFitterFunction(
+                                itkEnvironment.trackingGeometry,
+                                itkEnvironment.field,
+                                **kalmanOptions,
                             ),
                         )
                     )
@@ -495,6 +526,7 @@ def common_pipeline(
         time.sleep(0.5)
         gpu_profiler.kill()
         plot_gpu_memory(profile_file, outputDir)
+
 
 if "__main__" == __name__:
     main()

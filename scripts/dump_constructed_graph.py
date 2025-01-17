@@ -21,6 +21,7 @@ from acts.examples.simulation import *
 
 from acts import UnitConstants as u
 
+
 @click.command()
 @click.option("--output", "-o", type=str)
 @click.option("--modulemap", type=str)
@@ -30,29 +31,31 @@ from acts import UnitConstants as u
 def main(output, modulemap, input_file, gnn, exclude_phi_ovl_sps):
     outputDir = Path(output)
     outputDir.mkdir(exist_ok=True, parents=True)
-    logLevel=acts.logging.INFO
+    logLevel = acts.logging.INFO
 
     s = acts.examples.Sequencer(
         events=1,
         skip=0,
         numThreads=1,
-        outputDir = outputDir,
+        outputDir=outputDir,
     )
 
     # Read Athena input space points and clusters from root file
     s.addReader(
         acts.examples.RootAthenaDumpReader(
             level=logLevel,
-            treename  = "GNN4ITk",
-            inputfile = [input_file,],
-            outputSpacePoints = "spacepoints",
-            outputClusters = "clusters",
-            outputMeasurements = "measurements",
-            outputMeasurementParticlesMap = "measurement_particles_map",
-            onlyPassedParticles = False,
-            skipOverlapSPsPhi = exclude_phi_ovl_sps,
-            skipOverlapSPsEta = False,
-            absBoundaryTolerance = 2 * u.mm,
+            treename="GNN4ITk",
+            inputfile=[
+                input_file,
+            ],
+            outputSpacePoints="spacepoints",
+            outputClusters="clusters",
+            outputMeasurements="measurements",
+            outputMeasurementParticlesMap="measurement_particles_map",
+            onlyPassedParticles=False,
+            skipOverlapSPsPhi=exclude_phi_ovl_sps,
+            skipOverlapSPsEta=False,
+            absBoundaryTolerance=2 * u.mm,
         )
     )
 
@@ -109,11 +112,20 @@ def main(output, modulemap, input_file, gnn, exclude_phi_ovl_sps):
         edgeClassifiers=edgeClassifiers,
         trackBuilder=trackBuilder,
         nodeFeatures=[
-            e.R, e.Phi, e.Z, e.Eta,
-            e.Cluster1R, e.Cluster1Phi, e.Cluster1Z, e.Cluster1Eta,
-            e.Cluster2R, e.Cluster2Phi, e.Cluster2Z, e.Cluster2Eta,
+            e.R,
+            e.Phi,
+            e.Z,
+            e.Eta,
+            e.Cluster1R,
+            e.Cluster1Phi,
+            e.Cluster1Z,
+            e.Cluster1Eta,
+            e.Cluster2R,
+            e.Cluster2Phi,
+            e.Cluster2Z,
+            e.Cluster2Eta,
         ],
-        featureScales = [1000.0, 3.14159265359, 1000.0, 1.0] * 3,
+        featureScales=[1000.0, 3.14159265359, 1000.0, 1.0] * 3,
     )
 
     s.addAlgorithm(
@@ -126,7 +138,7 @@ def main(output, modulemap, input_file, gnn, exclude_phi_ovl_sps):
             **gnn_alg_config,
         )
     )
-        
+
     s.addWriter(
         acts.examples.CsvExaTrkXGraphWriter(
             level=logLevel,
@@ -142,8 +154,9 @@ def main(output, modulemap, input_file, gnn, exclude_phi_ovl_sps):
             outputDir=outputDir,
         )
     )
-    
+
     s.run()
+
 
 if __name__ == "__main__":
     main()

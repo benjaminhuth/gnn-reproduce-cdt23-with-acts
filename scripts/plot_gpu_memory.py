@@ -17,7 +17,7 @@ data = pd.read_csv(
 )
 
 # Remove last line that can be corrupted
-data.drop(data.tail(1).index,inplace=True)
+data.drop(data.tail(1).index, inplace=True)
 
 data["timestamp"] = data["timestamp"].apply(
     lambda tp: datetime.strptime(tp, "%Y/%m/%d %H:%M:%S.%f")
@@ -42,6 +42,3 @@ ax.legend()
 
 fig.tight_layout()
 fig.savefig(outputDir / "gpu_memory_profile.png")
-
-
-

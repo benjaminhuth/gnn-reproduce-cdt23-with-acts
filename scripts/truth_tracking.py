@@ -6,6 +6,7 @@ import acts
 import acts.examples
 from acts.examples.reconstruction import *
 
+
 @click.command()
 @click.option("--events", "-n", type=int, default=1)
 @click.option("--input-data", "-i", type=str)
@@ -15,7 +16,9 @@ from acts.examples.reconstruction import *
 @click.option("--itk-file2", type=str)
 def main(events, input_data, output_dir, material_map, itk_file1, itk_file2):
 
-    itkEnvironment = ItkEnvironment(itk_file1, itk_file2, material_map, acts.logging.INFO)
+    itkEnvironment = ItkEnvironment(
+        itk_file1, itk_file2, material_map, acts.logging.INFO
+    )
     geometryIdMap = itkEnvironment.get_geoid_map(events, 0, input_data)
     rnd = acts.examples.RandomNumbers(seed=34509)
 
@@ -26,16 +29,16 @@ def main(events, input_data, output_dir, material_map, itk_file1, itk_file2):
     s.addReader(
         acts.examples.RootAthenaDumpReader(
             level=acts.logging.ERROR,
-            treename  = "GNN4ITk",
-            inputfile = input_data,
-            outputSpacePoints = "spacepoints",
-            outputClusters = "clusters",
-            outputMeasurements = "measurements",
-            outputMeasurementParticlesMap = "measurement_particles_map",
-            outputParticles = "particles",
-            onlyPassedParticles = True,
-            geometryIdMap = geometryIdMap,
-            trackingGeometry = itkEnvironment.trackingGeometry,
+            treename="GNN4ITk",
+            inputfile=input_data,
+            outputSpacePoints="spacepoints",
+            outputClusters="clusters",
+            outputMeasurements="measurements",
+            outputMeasurementParticlesMap="measurement_particles_map",
+            outputParticles="particles",
+            onlyPassedParticles=True,
+            geometryIdMap=geometryIdMap,
+            trackingGeometry=itkEnvironment.trackingGeometry,
         )
     )
 

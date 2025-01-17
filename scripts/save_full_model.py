@@ -36,6 +36,7 @@ import click
 # TODO this is switched of below (by me?)... Why???
 torch.use_deterministic_algorithms(True)
 
+
 @click.command()
 @click.option("--config", type=str, help="configuration file", default=None)
 @click.option("-c", "--checkpoint", type=str, help="checkpoint path", default=None)
@@ -48,7 +49,19 @@ torch.use_deterministic_algorithms(True)
 @click.option("--onnx/--no-onnx", default=False)
 @click.option("--amp/--no-amp", default=False)
 @click.option("--sigmoid/--no-sigmoid", default=False)
-def main(config, checkpoint, output, tag, stage, model_name, torch_script, torch_compile, onnx, amp, sigmoid):
+def main(
+    config,
+    checkpoint,
+    output,
+    tag,
+    stage,
+    model_name,
+    torch_script,
+    torch_compile,
+    onnx,
+    amp,
+    sigmoid,
+):
     pprint.pprint(locals())
     if checkpoint is not None:
         checkpoint_path = Path(checkpoint)
@@ -93,7 +106,7 @@ def main(config, checkpoint, output, tag, stage, model_name, torch_script, torch
     # load the checkpoint
     print(f"Loading checkpoint from {checkpoint_path} with model {lightning_model}")
     model = lightning_model.load_from_checkpoint(checkpoint_path, map_location="cpu")
-    
+
     # set if we use amp
     model.amp = amp
     model.do_sigmoid = sigmoid
@@ -120,7 +133,9 @@ def main(config, checkpoint, output, tag, stage, model_name, torch_script, torch
     num_edges = 2000
     spacepoint_features = len(model.hparams["node_features"])
 
-    node_features = torch.rand(num_spacepoints, spacepoint_features).to(torch.float32).cuda()
+    node_features = (
+        torch.rand(num_spacepoints, spacepoint_features).to(torch.float32).cuda()
+    )
     try:
         n_edge_features = len(model.hparams["edge_features"])
         edge_features = torch.rand(num_edges, n_edge_features).cuda()
@@ -136,7 +151,10 @@ def main(config, checkpoint, output, tag, stage, model_name, torch_script, torch
     elif "Filter" in model_name:
         input_data = (node_features, edge_index)
         input_names = ["node_features", "edge_index"]
-        dynamic_axes = {"nodes_features": {0: "num_spacepoints"}, "edge_index": {1, "num_edges"}}
+        dynamic_axes = {
+            "nodes_features": {0: "num_spacepoints"},
+            "edge_index": {1, "num_edges"},
+        }
     else:
         input_data = (node_features, edge_index, edge_features)
         input_names = ["x", "edge_index", "edge_attr"]
@@ -157,7 +175,7 @@ def main(config, checkpoint, output, tag, stage, model_name, torch_script, torch
     ##########################
     if torch_script:
         with torch.jit.optimized_execution(True):
-            script = model.to_torchscript(example_inputs=input_data, method='trace')
+            script = model.to_torchscript(example_inputs=input_data, method="trace")
 
         new_output = script(*input_data)
         torch.jit.freeze(script)
@@ -174,7 +192,6 @@ def main(config, checkpoint, output, tag, stage, model_name, torch_script, torch
         print(f"Saving model to {torch_script_path}")
         torch.jit.save(script, torch_script_path)
         print(f"Done saving model to {torch_script_path}")
-
 
     ###########################
     # Do torch compile export #
@@ -200,7 +217,7 @@ def main(config, checkpoint, output, tag, stage, model_name, torch_script, torch
         # model.edge_output_transform = try_compile(model.edge_output_transform, dynamic=True)
 
         dynamic_axes_torch = {}
-        for ax, info  in dynamic_axes.items():
+        for ax, info in dynamic_axes.items():
             dynamic_axes_torch[ax] = {}
             for idx, name in info.items():
                 dynamic_axes_torch[ax][idx] = torch.export.Dim(name)
@@ -218,12 +235,16 @@ def main(config, checkpoint, output, tag, stage, model_name, torch_script, torch
                 model,
                 input_data,
                 dynamic_shapes=dynamic_axes_torch,
-                #options={"aot_inductor.output_path": str(torch_so_path)},
+                # options={"aot_inductor.output_path": str(torch_so_path)},
             )
         tmp_cpp_file = Path(tmp_so_path.replace(".so", ".cpp"))
         assert tmp_cpp_file.exists()
 
-        tmp_files = [ f for f in os.listdir(tmp_cpp_file.parent) if not (f in tmp_so_path.replace(".so",".o")) and f[-2:] == ".o" ]
+        tmp_files = [
+            f
+            for f in os.listdir(tmp_cpp_file.parent)
+            if not (f in tmp_so_path.replace(".so", ".o")) and f[-2:] == ".o"
+        ]
         assert len(tmp_files) == 1
         other_obj_file = tmp_cpp_file.parent / tmp_files[0]
 
@@ -247,6 +268,7 @@ def main(config, checkpoint, output, tag, stage, model_name, torch_script, torch
     # try to save the model to ONNX
     if onnx:
         import onnx
+
         print("Trying to save the model to ONNX", onnx.__version__)
         onnx_path = (
             out_path / f"{stage}-{model_name}-{tag}.onnx"
@@ -267,23 +289,28 @@ def main(config, checkpoint, output, tag, stage, model_name, torch_script, torch
         input_data = (
             input_data[0].cpu().detach().numpy(),
             input_data[1].cpu().detach().numpy(),
-            input_data[2].cpu().detach().numpy()
+            input_data[2].cpu().detach().numpy(),
         )
-        
-        import onnxruntime as ort
-        session = ort.InferenceSession(onnx_path)
-        onnx_outputs = session.run(None, 
-                              {
-                                  'x': input_data[0], 
-                                  'edge_index': input_data[1], 
-                                  'edge_attr': input_data[2]
-                              })
 
-        if not np.isclose(onnx_outputs[0], output.cpu().detach().numpy(), rtol=0.0, atol=1.e-3).all():
+        import onnxruntime as ort
+
+        session = ort.InferenceSession(onnx_path)
+        onnx_outputs = session.run(
+            None,
+            {
+                "x": input_data[0],
+                "edge_index": input_data[1],
+                "edge_attr": input_data[2],
+            },
+        )
+
+        if not np.isclose(
+            onnx_outputs[0], output.cpu().detach().numpy(), rtol=0.0, atol=1.0e-3
+        ).all():
             print("WARNING      ONNX inference output is not close with 1.e-3")
             mask = ~np.isclose(onnx_outputs[0], output.cpu().detach().numpy())
-            print("onnx",onnx_outputs[0][mask])
-            print("ref ",output.cpu().detach().numpy()[mask])
+            print("onnx", onnx_outputs[0][mask])
+            print("ref ", output.cpu().detach().numpy()[mask])
         else:
             print("Output of onnx runtime inference is close to reference")
 

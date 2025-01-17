@@ -3,7 +3,7 @@ stage: data_reading
 model: AthenaRootReader
 input_dir: rel24/data
 stage_dir: tmp/rel24/feature_store
-#module_lookup_path: 
+#module_lookup_path:
 
 max_workers: 1
 

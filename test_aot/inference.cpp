@@ -8,7 +8,7 @@ int main() {
     c10::InferenceMode mode;
 
     torch::inductor::AOTIModelContainerRunnerCuda runner("/root/reproduce_gnn_results/test_aot/build/model.so");
-    
+
     const int n_nodes = 10;
     const int n_node_features = 12;
     const int n_edges = 20;
