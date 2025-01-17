@@ -177,14 +177,16 @@ def common_pipeline(
 
     def write_performance(s, tracks_key, require_ref_surface):    
         def match_and_write(doubleMatching, tag, reweight):
+            tpm = tracks_key + "_" + tag + "_tpm"
+            ptm = tracks_key + "_" + tag + "_ptm"
             s.addAlgorithm(
                 acts.examples.TrackTruthMatcher(
                     level=max(logLevel, acts.logging.INFO),
                     inputTracks=tracks_key,
                     inputParticles="particles_selected",
                     inputMeasurementParticlesMap="measurement_particles_map",
-                    outputTrackParticleMatching=tracks_key + "_" + tag + "_tpm",
-                    outputParticleTrackMatching=tracks_key + "_" + tag + "_ptm",
+                    outputTrackParticleMatching=tpm,
+                    outputParticleTrackMatching=ptm,
                     doubleMatching=doubleMatching,
                     reweightVolumes=reweight,
                 )
@@ -194,28 +196,30 @@ def common_pipeline(
                 acts.examples.TrackFinderPerformanceWriter(
                     level=max(logLevel, acts.logging.INFO),
                     inputParticles="particles_selected",
-                    inputTrackParticleMatching=tracks_key + "_" + tag + "_tpm",
-                    inputParticleTrackMatching=tracks_key + "_" + tag + "_ptm",
+                    inputTrackParticleMatching=tpm,
+                    inputParticleTrackMatching=ptm,
                     inputTracks=tracks_key,
                     filePath=outputDir / f"performance_{filenamePrefix}_{tag}_{tracks_key}.root",
                 )
             )
 
+            # If we have a ref surface, we also have fitted I think
+            if require_ref_surface:
+                s.addWriter(
+                    acts.examples.TrackFitterPerformanceWriter(
+                        level=max(logLevel, acts.logging.INFO),
+                        inputParticles="particles_selected",
+                        inputTrackParticleMatching=tpm,
+                        inputTracks=tracks_key,
+                        filePath=outputDir / f"fit_performance_{filenamePrefix}_{tag}_{tracks_key}.root",
+                    )
+                )
+
         pixelVolumeWeights = { v: 2.0 for v in [4,5,6,9,10,11,14,15,16]}
         match_and_write(False, "atlas_matching", pixelVolumeWeights)
         #match_and_write(False, "single_matching", {})
         #match_and_write(True, "double_matching", {})
-       
-        if writeIntermediateOutput:
-            s.addWriter(
-                acts.examples.JsonTrackWriter(
-                    level=acts.logging.INFO,
-                    inputTracks=tracks_key,
-                    inputMeasurementParticlesMap="measurement_particles_map",
-                    outputDir=outputDir,
-                    fileStemp=tracks_key,
-                )
-            )
+
  
     for f in input_file:
         assert Path(f).exists()
@@ -403,74 +407,75 @@ def common_pipeline(
             )
         )
 
-        kalmanOptions = {
-            "multipleScattering": True,
-            "energyLoss": True,
-            "reverseFilteringMomThreshold": 0,
-            "freeToBoundCorrection": acts.examples.FreeToBoundCorrection(False),
-            "level": logLevel,
-            "chi2Cut": 100000000.0,
-        }
+        for chi2Cut in [20.0, 100.0, float('inf')]:
+            kalmanOptions = {
+                "multipleScattering": True,
+                "energyLoss": True,
+                "reverseFilteringMomThreshold": 0,
+                "freeToBoundCorrection": acts.examples.FreeToBoundCorrection(False),
+                "level": logLevel,
+                "chi2Cut": chi2Cut,
+            }
 
-        if not use_ckf:
-            s.addAlgorithm(
-                acts.examples.TrackFittingAlgorithm(
-                    level=logLevel,
-                    inputMeasurements="measurements",
-                    inputProtoTracks="prototracks_with_params",
-                    inputInitialTrackParameters="estimatedparameters",
-                    inputClusters="",
-                    outputTracks="fitted_tracks",
-                    pickTrack=-1,
-                    fit = acts.examples.makeKalmanFitterFunction(
-                        itkEnvironment.trackingGeometry, itkEnvironment.field, **kalmanOptions
-                    ),
-                    calibrator=acts.examples.makePassThroughCalibrator(),
-                )
-            )
-        else:
-            s.addAlgorithm(
-                acts.examples.TrackFindingFromPrototrackAlgorithm(
-                    level=logLevel,
-                    inputProtoTracks="prototracks_with_params",
-                    inputMeasurements="measurements",
-                    inputInitialTrackParameters="estimatedparameters",
-                    outputTracks="fitted_tracks", #"raw_tracks",
-                    measurementSelectorCfg=acts.MeasurementSelector.Config(
-                        #[(acts.GeometryIdentifier(), ([], [chi2Cut], [1], []))]
-                        [(acts.GeometryIdentifier(), acts.MeasurementSelectorCuts([], [kalmanOptions["chi2Cut"],], [1], []))]
-                    ),
-                    trackingGeometry=itkEnvironment.trackingGeometry,
-                    magneticField=itkEnvironment.field,
-                    findTracks=acts.examples.TrackFindingAlgorithm.makeTrackFinderFunction(
-                        itkEnvironment.trackingGeometry,
-                        itkEnvironment.field,
-                        acts.logging.INFO,
-                    ),
-                    onlyPrototrackMeasurements=False,
-                )
-            )
-            
-            if False:
+            tracks_key = "fitted_tracks_" + str(chi2Cut).replace('.0', '') + "_chi2"
+
+            if not use_ckf:
                 s.addAlgorithm(
-                    acts.examples.RefittingAlgorithm(
+                    acts.examples.TrackFittingAlgorithm(
                         level=logLevel,
-                        inputTracks="raw_tracks",
-                        outputTracks="fitted_tracks",
+                        inputMeasurements="measurements",
+                        inputProtoTracks="prototracks_with_params",
+                        inputInitialTrackParameters="estimatedparameters",
+                        inputClusters="",
+                        outputTracks=tracks_key,
+                        pickTrack=-1,
                         fit = acts.examples.makeKalmanFitterFunction(
                             itkEnvironment.trackingGeometry, itkEnvironment.field, **kalmanOptions
                         ),
+                        calibrator=acts.examples.makePassThroughCalibrator(),
+                    )
+                )
+            else:
+                s.addAlgorithm(
+                    acts.examples.TrackFindingFromPrototrackAlgorithm(
+                        level=logLevel,
+                        inputProtoTracks="prototracks_with_params",
+                        inputMeasurements="measurements",
+                        inputInitialTrackParameters="estimatedparameters",
+                        outputTracks=tracks_key,
+                        measurementSelectorCfg=acts.MeasurementSelector.Config(
+                            [(acts.GeometryIdentifier(), acts.MeasurementSelectorCuts([], [kalmanOptions["chi2Cut"],], [1], []))]
+                        ),
+                        trackingGeometry=itkEnvironment.trackingGeometry,
+                        magneticField=itkEnvironment.field,
+                        findTracks=acts.examples.TrackFindingAlgorithm.makeTrackFinderFunction(
+                            itkEnvironment.trackingGeometry,
+                            itkEnvironment.field,
+                            acts.logging.INFO,
+                        ),
+                        onlyPrototrackMeasurements=False,
                     )
                 )
 
+                if False:
+                    s.addAlgorithm(
+                        acts.examples.RefittingAlgorithm(
+                            level=logLevel,
+                            inputTracks=tracks_key,
+                            outputTracks="fitted_tracks",
+                            fit = acts.examples.makeKalmanFitterFunction(
+                                itkEnvironment.trackingGeometry, itkEnvironment.field, **kalmanOptions
+                            ),
+                        )
+                    )
 
-        # Do not select here, so we see tracks that are shorter after KF in the plots
-        write_performance(
-            s,
-            tracks_key="fitted_tracks",
-            require_ref_surface=True,
-        )
-
+            # Do not select here, so we see tracks that are shorter
+            # after KF in the plots
+            write_performance(
+                s,
+                tracks_key=tracks_key,
+                require_ref_surface=True,
+            )
 
     if profile:
         profile_file = outputDir / "gpu_memory_profile.csv"
